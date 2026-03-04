@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: syncwatt-backend-ingress
+  namespace: syncwatt-prod
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - syncwatt-api.dog-foot.com
+    secretName: syncwatt-api-tls
+  rules:
+  - host: syncwatt-api.dog-foot.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: syncwatt-backend-svc
+            port:
+              number: 80
