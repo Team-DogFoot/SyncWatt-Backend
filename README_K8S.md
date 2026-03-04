@@ -13,6 +13,8 @@ We use [SealedSecrets](https://github.com/bitnami-labs/sealed-secrets) to safely
 ### Step 1: Create a Local Secret (Dry-run)
 First, create a standard Kubernetes Secret locally without applying it to the cluster.
 
+> **CRITICAL:** Ensure `secret.yaml` is added to your `.gitignore` file. NEVER commit unencrypted secrets to Git.
+
 ```bash
 kubectl create secret generic syncwatt-secret \
   --from-literal=TELEGRAM_TOKEN='your-telegram-token' \

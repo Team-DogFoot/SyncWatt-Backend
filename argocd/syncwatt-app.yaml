@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Team-DogFoot/dog-foot-k8s-manifests
-    targetRevision: HEAD
+    targetRevision: main
     path: apps/syncwatt/prod
   destination:
     server: https://kubernetes.default.svc
