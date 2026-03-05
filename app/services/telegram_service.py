@@ -118,34 +118,45 @@ class TelegramService:
                 analysis = DiagnosisResult.model_validate(analysis_data)
                 
                 # 금액 천단위 콤마 처리
-                loss_formatted = format(int(analysis.opportunity_loss_krw), ",")
+                loss_formatted = format(abs(int(analysis.opportunity_loss_krw)), ",")
                 optimal_formatted = format(int(analysis.optimal_revenue_krw), ",")
                 actual_formatted = format(int(analysis.actual_revenue_krw), ",")
-                recovery_formatted = format(int(analysis.potential_recovery_krw), ",")
+                recovery_formatted = format(int(analysis.opportunity_loss_krw * 0.4) if analysis.opportunity_loss_krw > 0 else 0, ",")
                 
-                # DB 저장
-                self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
+                # DB 저장 (예외 격리)
+                try:
+                    self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
+                except Exception as e:
+                    logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
 
                 # PRD 규격에 맞춘 최종 응답 구성
-                response_text = (
-                    f"📝 지난달 손실 진단 결과\n\n"
-                    f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n\n"
-                    f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
-                    f"💡 주요 원인\n"
-                    f"{analysis.one_line_message}\n\n"
-                )
-                
-                # 손실이 있는 경우 가입 유도 문구 추가
                 if analysis.opportunity_loss_krw > 0:
-                    response_text += (
-                        f"📈 이 중 약 {recovery_formatted}원은 입찰 예측값 최적화로 회수 가능해요.\n"
-                        f"가입 후 매일 아침 입찰 추천값을 받아보세요.\n\n"
+                    response_text = (
+                        f"📝 *지난달 KPX 전환 시 수익 분석*\n\n"
+                        f"만약 시장가(KPX)로 정산받으셨다면,\n"
+                        f"현재보다 약 *{loss_formatted}원* 더 받으실 수 있었어요.\n\n"
+                        f"📊 분석 근거\n"
+                        f"• KPX 기대수익: {optimal_formatted}원\n"
+                        f"• 실제 수령액: {actual_formatted}원\n\n"
+                        f"💡 *주요 원인*\n"
+                        f"{analysis.one_line_message}\n\n"
+                        f"📈 이 중 약 *{recovery_formatted}원*은 입찰 예측값 최적화로 추가 확보가 가능합니다.\n"
+                        f"지금 가입하고 내일 아침부터 입찰 추천값을 받아보세요!"
                     )
-
-                if not analysis.address_used:
-                    response_text += "📍 발전소 위치 정보가 없어서 전국 평균 일조량으로 추산했어요. 가입 후 위치를 등록하면 더 정확한 분석이 가능해요.\n\n"
+                else:
+                    response_text = (
+                        f"📝 *지난달 수익 진단 결과*\n\n"
+                        f"소장님은 현재 정산 방식이 시장가(KPX)보다 유리한 상태입니다.\n\n"
+                        f"📊 수치 확인\n"
+                        f"• 실제 수령액: {actual_formatted}원\n"
+                        f"• KPX 기대수익: {optimal_formatted}원\n\n"
+                        f"💡 진단: 현재의 계약 방식을 유지하시는 것을 추천드려요!"
+                    )
                 
-                response_text += "🔗 상세 리포트 보기"
+                if not analysis.address_used:
+                    response_text += "\n\n📍 발전소 위치 정보가 없어서 전국 평균 일조량으로 추산했어요. 가입 후 위치를 등록하면 더 정확한 분석이 가능해요."
+                
+                response_text += "\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
                 
                 await self.send_text_message(chat_id, response_text)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")

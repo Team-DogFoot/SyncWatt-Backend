@@ -44,24 +44,27 @@ class KMAService:
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.get(self.base_url, params=params, timeout=10.0)
+                response = await client.get(self.base_url, params=params, timeout=15.0)
                 response.raise_for_status()
                 data = response.json()
                 
                 # Simple logic to average sumGs (Global Solar Radiation)
                 items = data.get("response", {}).get("body", {}).get("items", {}).get("item", [])
                 if not items:
-                    raise ValueError("No data returned from KMA API")
+                    logger.warning(f"No weather data found for {year}-{month} at stn {stn_id}")
+                    return KMAMonthlyIrradianceResponse(
+                        year=year, month=month, avg_irradiance=15.5, unit="MJ/m²", stn_id=stn_id, stn_name="API_NO_DATA_FALLBACK"
+                    )
 
                 total_gs = 0.0
                 count = 0
                 for item in items:
                     gs = item.get("sumGs")
-                    if gs:
+                    if gs and str(gs).strip():
                         total_gs += float(gs)
                         count += 1
                 
-                avg_gs = total_gs / count if count > 0 else 0.0
+                avg_gs = total_gs / count if count > 0 else 15.5 # Fallback to proxy avg if count is 0
                 
                 return KMAMonthlyIrradianceResponse(
                     year=year,
@@ -69,9 +72,10 @@ class KMAService:
                     avg_irradiance=avg_gs,
                     unit="MJ/m²",
                     stn_id=stn_id,
-                    stn_name=items[0].get("stnNm") if items else None
+                    stn_name=items[0].get("stnNm") if items else "UNKNOWN"
                 )
-        except Exception:
+        except Exception as e:
+            logger.error(f"KMA API Error ({year}-{month}): {str(e)}")
             # Fallback to mock on error
             return KMAMonthlyIrradianceResponse(
                 year=year,

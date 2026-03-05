@@ -5,3 +5,4 @@ class SettlementOcrData(BaseModel):
     generation_kwh: float = Field(description="실제 발전량 (kWh)")
     total_revenue_krw: int = Field(description="실제 총 수령액 (원)")
     address: str | None = Field(default=None, description="발전소 주소")
+    selection_reason: str | None = Field(default=None, description="데이터 선택 사유 (로그용)")

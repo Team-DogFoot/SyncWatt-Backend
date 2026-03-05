@@ -18,23 +18,21 @@ class DiagnosisAgent(LlmAgent):
             입력받은 정산 데이터 {settlement_data}와 외부 시장 데이터 {market_data}를 분석하여 수익 손실 진단을 수행하세요.
 
             지침:
-            - 반드시 {market_data}에 포함된 'curr_smp'와 'prev_smp' 값을 사용하여 계산하세요. 데이터가 없거나 0이면 원인 불명으로 처리하세요.
-            - 실제 발전량과 실제 수령액은 {settlement_data}의 값을 따르세요.
-
-            계산 공식:
-            1. 최적 수익 = {settlement_data}.generation_kwh * {market_data}.curr_smp
-            2. 손실액 = 최적 수익 - {settlement_data}.total_revenue_krw
-            3. 예측 오차 개선 가능 금액 = 손실액 * 0.4 (손실액의 40%는 예측 오차 개선으로 회수 가능하다는 추산값)
+            - 수익 분석 관점: 이 진단은 "만약 KPX(전력거래소) 시장가로 정산받았다면?"을 가정하여 소장님의 기회 수익을 분석하는 것입니다.
+            - 실제 수령액(공급가액)은 {settlement_data}의 total_revenue_krw를 사용하세요.
+            - 최적 수익 = {settlement_data}.generation_kwh * {market_data}.curr_smp
+            - 손실액 = 최적 수익 - {settlement_data}.total_revenue_krw
+            - 손실액이 양수(+)면 "KPX로 전환 시 얻을 수 있었던 기회 수익"으로, 음수(-)면 "현재 한전 계약이 시장가보다 유리함"으로 해석합니다.
 
             분류 기준 (우선순위):
             1. 일조량 원인: {market_data}.curr_irr이 {market_data}.prev_year_irr 대비 10% 이상 낮으면 -> WEATHER
                메시지: "주요 원인은 [월]월 일조량이 평균보다 [N]%% 낮았기 때문이에요."
             2. SMP 원인: {market_data}.curr_smp가 {market_data}.prev_smp 대비 10% 이상 낮으면 -> SMP
-               메시지: "주요 원인은 SMP가 전달 대비 [N]%% 하락했기 때문이에요."
+               메시지: "주요 원인은 SMP 시장가가 전달 대비 [N]%% 하락했기 때문이에요."
             3. 복합 원인: 일조량과 SMP 둘 다 5% 이상 낮으면 -> COMPLEX
                메시지: "일조량 감소([N]%%)와 SMP 하락([N]%%)이 복합적으로 영향을 줬어요."
             4. 원인 불명 -> UNKNOWN
-               메시지: "이번달은 특이한 손실 원인이 없어요. 예측 오차를 점검해보세요."
+               메시지: "현재 소장님의 정산 방식은 시장가 변동과 무관한 고정 단가 방식일 수 있습니다."
 
             모든 출력은 DiagnosisResult 스키마 형식을 엄격히 준수해야 합니다.
             """,
@@ -45,11 +43,21 @@ class DiagnosisAgent(LlmAgent):
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
+        settlement_data = ctx.session.state.get("settlement_data")
+        market_data = ctx.session.state.get("market_data")
+        
         logger.info(f"[{self.name}] 수익 손실 최종 진단 시작")
+        logger.debug(f"[{self.name}] Input Settlement Data: {settlement_data}")
+        logger.debug(f"[{self.name}] Input Market Data: {market_data}")
         
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] 최종 진단 완료 (소요시간: {duration:.2f}초)")
-                logger.info(f"[{self.name}] 진단 결과: {ctx.session.state.get('analysis_result')}")
+                
+                result = ctx.session.state.get("analysis_result")
+                if result:
+                    logger.info(f"[{self.name}] 진단 결과: {result.model_dump()}")
+                else:
+                    logger.error(f"[{self.name}] 진단 실패: 결과가 None입니다. 데이터 부족 또는 파싱 에러.")
             yield event
