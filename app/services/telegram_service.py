@@ -5,7 +5,6 @@ from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
 from app.schemas.ai.diagnosis import DiagnosisResult
-from app.schemas.ai.settlement import SettlementOcrData
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
@@ -69,7 +68,7 @@ class TelegramService:
             logger.info(f"[Telegram] 이미지 다운로드 완료 (크기: {len(image_bytes)} bytes)")
 
             # 3. ADK 파이프라인 실행
-            logger.info(f"[Pipeline] 분석 파이프라인 가동 시작")
+            logger.info("[Pipeline] 분석 파이프라인 가동 시작")
             async for event in self.runner.run_async(
                 user_id=user_id_str,
                 session_id=session_id,

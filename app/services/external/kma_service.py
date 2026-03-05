@@ -1,5 +1,4 @@
 import httpx
-from typing import Optional
 from app.core.config import settings
 from app.schemas.external import KMAMonthlyIrradianceResponse
 
@@ -72,7 +71,7 @@ class KMAService:
                     stn_id=stn_id,
                     stn_name=items[0].get("stnNm") if items else None
                 )
-        except Exception as e:
+        except Exception:
             # Fallback to mock on error
             return KMAMonthlyIrradianceResponse(
                 year=year,

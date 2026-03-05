@@ -1,5 +1,4 @@
 import httpx
-from typing import Optional
 from app.core.config import settings
 from app.schemas.external import KPXMonthlyPriceResponse
 
@@ -33,18 +32,15 @@ class KPXService:
         try:
             # This is a very simplified placeholder for the actual logic
             # which might involve fetching daily averages for the month.
-            async with httpx.AsyncClient() as client:
-                # Mocking the actual fetch logic for now to ensure robustness
-                # unless a specific direct monthly API is known.
-                return KPXMonthlyPriceResponse(
-                    year=year,
-                    month=month,
-                    avg_smp=185.2,
-                    avg_rec=75.5,
-                    smp_unit="원/kWh",
-                    rec_unit="원/REC"
-                )
-        except Exception as e:
+            return KPXMonthlyPriceResponse(
+                year=year,
+                month=month,
+                avg_smp=185.2,
+                avg_rec=75.5,
+                smp_unit="원/kWh",
+                rec_unit="원/REC"
+            )
+        except Exception:
             # Fallback to mock on error
             return KPXMonthlyPriceResponse(
                 year=year,
