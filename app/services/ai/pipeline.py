@@ -35,11 +35,13 @@ def create_mvp_analysis_pipeline() -> SequentialAgent:
     )
     
     # 2. 전체 순차 파이프라인 조립
+    from app.services.ai.agents.code_verifier import CodeVerifierAgent
+    
     pipeline = SequentialAgent(
         name="syncwatt_mvp_pipeline",
         sub_agents=[
             parallel_layer,
-            AgentFactory.get_verifier_agent(),
+            CodeVerifierAgent(),
             AgentFactory.get_data_fetcher_agent(),
             AgentFactory.get_diagnosis_agent()
         ]

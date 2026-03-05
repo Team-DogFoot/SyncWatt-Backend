@@ -150,7 +150,7 @@ class TelegramService:
                         f"📊 수치 확인\n"
                         f"• 실제 수령액: {actual_formatted}원\n"
                         f"• KPX 기대수익: {optimal_formatted}원\n\n"
-                        f"💡 진단: 현재의 계약 방식을 유지하시는 것을 추천드려요!"
+                        f"💡 현재 계약 방식을 유지하는 것이 경제적입니다."
                     )
                 
                 if not analysis.address_used:

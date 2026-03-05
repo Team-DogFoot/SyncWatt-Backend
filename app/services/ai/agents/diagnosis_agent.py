@@ -34,7 +34,7 @@ class DiagnosisAgent(LlmAgent):
             4. 원인 불명 -> UNKNOWN
                메시지: "현재 소장님의 정산 방식은 시장가 변동과 무관한 고정 단가 방식일 수 있습니다."
 
-            모든 출력은 DiagnosisResult 스키마 형식을 엄격히 준수해야 합니다.
+            모든 출력은 DiagnosisResult 스키마 형식을 엄격히 준수해야 하며, JSON 형식으로만 응답하세요. 다른 부가 설명은 생략하세요.
             """,
             output_schema=DiagnosisResult,
             output_key="analysis_result"
