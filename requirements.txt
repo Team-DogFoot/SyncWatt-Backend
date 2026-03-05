@@ -11,3 +11,7 @@ aiosqlite
 asyncpg
 pytest
 pytest-asyncio
+sqlmodel
+pandas
+openpyxl
+psycopg2-binary

@@ -10,6 +10,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from app.db.session import init_db
+
 app = FastAPI(title="SyncWatt-Backend", version="0.1.0")
 
 # 라우터 등록
@@ -26,4 +28,9 @@ async def startup_event():
     logger.info(f"  Project: {settings.PROJECT_NAME}")
     logger.info(f"  Model:   {settings.GEMINI_MODEL}")
     logger.info("========================================")
+    
+    # DB 초기화 (테이블 생성만)
+    init_db()
+    logger.info("Database initialized (schema only)")
+    
     logger.info("System initialization complete")

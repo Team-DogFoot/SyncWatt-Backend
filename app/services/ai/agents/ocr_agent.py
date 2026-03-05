@@ -20,6 +20,7 @@ class OcrRefinerAgent(LlmAgent):
             - 정산 연월 (YYYY-MM 형식)
             - 실제 발전량 (kWh)
             - 실제 총 수령액 (원)
+            - 발전소 주소 (문서에 있는 경우만, 없으면 null)
             
             필요시 세션의 {raw_text}를 참조할 수 있습니다.
             """,
@@ -36,4 +37,5 @@ class OcrRefinerAgent(LlmAgent):
             if not event.partial:
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] 데이터 정제 완료 (소요시간: {duration:.2f}초)")
+                logger.info(f"[{self.name}] 정제된 데이터: {ctx.session.state.get('settlement_data')}")
             yield event

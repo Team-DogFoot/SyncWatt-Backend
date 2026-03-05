@@ -7,6 +7,9 @@ from app.services.ai.pipeline import pipeline
 from app.schemas.ai.diagnosis import DiagnosisResult
 from google.adk.runners import InMemoryRunner
 from google.genai import types
+from sqlmodel import Session
+from app.db.session import engine
+from app.models.settlement import MonthlySettlement
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +35,28 @@ class TelegramService:
                 logger.debug(f"[Telegram] 메시지 전송 완료 (chat_id: {chat_id})")
         except Exception as e:
             logger.error(f"[Telegram] 메시지 전송 실패: {str(e)}")
+
+    def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data: dict, market_data: dict):
+        """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
+        try:
+            with Session(engine) as session:
+                new_settlement = MonthlySettlement(
+                    telegram_chat_id=str(chat_id),
+                    year_month=analysis.year_month,
+                    actual_generation_kwh=settlement_data.get("generation_kwh", 0),
+                    actual_revenue_krw=analysis.actual_revenue_krw,
+                    smp_avg=market_data.get("curr_smp"),
+                    irradiance_avg=market_data.get("curr_irr"),
+                    optimal_revenue_krw=analysis.optimal_revenue_krw,
+                    opportunity_cost_krw=analysis.opportunity_loss_krw,
+                    loss_reason=analysis.loss_cause.value,
+                    source="ocr"
+                )
+                session.add(new_settlement)
+                session.commit()
+                logger.info(f"[DB] MonthlySettlement saved for chat_id: {chat_id}, month: {analysis.year_month}")
+        except Exception as e:
+            logger.error(f"[DB] Failed to save settlement: {str(e)}")
 
     async def handle_photo_message(self, update: Update):
         """이미지 메시지를 수신하여 분석 파이프라인을 실행합니다."""
@@ -85,6 +110,8 @@ class TelegramService:
             )
             
             analysis_data = session.state.get("analysis_result")
+            settlement_data = session.state.get("settlement_data")
+            market_data = session.state.get("market_data")
             
             if analysis_data:
                 # 결과 데이터 파싱 (Pydantic 모델 검증)
@@ -92,19 +119,52 @@ class TelegramService:
                 
                 # 금액 천단위 콤마 처리
                 loss_formatted = format(int(analysis.opportunity_loss_krw), ",")
+                optimal_formatted = format(int(analysis.optimal_revenue_krw), ",")
+                actual_formatted = format(int(analysis.actual_revenue_krw), ",")
+                recovery_formatted = format(int(analysis.potential_recovery_krw), ",")
                 
+                # DB 저장
+                self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
+
                 # PRD 규격에 맞춘 최종 응답 구성
                 response_text = (
-                    f"📝 *지난달 손실 진단 결과 (이중 검증 완료)*\n\n"
-                    f"이번 달은 약 *{loss_formatted}원*의 손실이 발생했습니다.\n\n"
-                    f"💡 *진단 원인*\n{analysis.one_line_message}\n\n"
-                    f"🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
+                    f"📝 지난달 손실 진단 결과\n\n"
+                    f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n\n"
+                    f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
+                    f"💡 주요 원인\n"
+                    f"{analysis.one_line_message}\n\n"
                 )
+                
+                # 손실이 있는 경우 가입 유도 문구 추가
+                if analysis.opportunity_loss_krw > 0:
+                    response_text += (
+                        f"📈 이 중 약 {recovery_formatted}원은 입찰 예측값 최적화로 회수 가능해요.\n"
+                        f"가입 후 매일 아침 입찰 추천값을 받아보세요.\n\n"
+                    )
+
+                if not analysis.address_used:
+                    response_text += "📍 발전소 위치 정보가 없어서 전국 평균 일조량으로 추산했어요. 가입 후 위치를 등록하면 더 정확한 분석이 가능해요.\n\n"
+                
+                response_text += "🔗 상세 리포트 보기"
+                
                 await self.send_text_message(chat_id, response_text)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
+                logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
             else:
                 logger.warning(f"[Telegram] 분석 결과 누락 (세션: {session_id})")
                 await self.send_text_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[Telegram] API 통신 에러: {str(e)}")
+            await self.send_text_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
+        except Exception as e:
+            logger.error(f"[Telegram] 치명적 에러 발생: {str(e)}", exc_info=True)
+            await self.send_text_message(chat_id, f"⚠️ 분석 중 예상치 못한 오류가 발생했습니다: {str(e)}")
+        finally:
+            duration = time.perf_counter() - start_time
+            logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
+
+telegram_service = TelegramService()
 
         except httpx.HTTPStatusError as e:
             logger.error(f"[Telegram] API 통신 에러: {str(e)}")

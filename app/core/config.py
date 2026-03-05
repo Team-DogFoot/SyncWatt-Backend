@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str | None = None
     GEMINI_MODEL: str = "gemini-2.0-flash"
     # Database Settings
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/syncwatt"
+    POSTGRES_USER: str | None = "postgres"
+    POSTGRES_PASSWORD: str | None = "postgres"
+    POSTGRES_DB: str | None = "syncwatt"
 
     # External Data API Keys
     KMA_API_KEY: str | None = None
