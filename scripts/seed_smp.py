@@ -38,18 +38,12 @@ def main():
     # we would pass args.files here. Currently it uses its internal defaults.
     # For now, let's make it more flexible.
     
-    # Overriding internal paths temporarily if user provided custom ones
-    original_paths = smp_service.file_paths
-    smp_service.file_paths = args.files
-    
     try:
-        smp_service.load_smp_data()
+        smp_service.load_smp_data(file_paths=args.files)
         logger.info("SMP data seeding complete.")
     except Exception as e:
         logger.error(f"Seeding failed: {str(e)}")
         sys.exit(1)
-    finally:
-        smp_service.file_paths = original_paths
 
 if __name__ == "__main__":
     main()

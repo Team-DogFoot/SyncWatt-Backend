@@ -9,18 +9,20 @@ logger = logging.getLogger(__name__)
 
 class SMPService:
     def __init__(self):
-        self.file_paths = [
-            "/Users/kkh/Downloads/smp_land_2026.xlsx",
-            "/Users/kkh/Downloads/smp_land_2025.xlsx"
-        ]
+        self.default_file_paths = []
 
-    def load_smp_data(self):
+    def load_smp_data(self, file_paths: list[str] = None):
         """
         Excel 파일에서 SMP 데이터를 로드하여 DB에 저장합니다.
         """
-        logger.info("Starting SMP data loading from Excel files...")
+        target_paths = file_paths or self.default_file_paths
+        if not target_paths:
+            logger.warning("No SMP file paths provided for loading.")
+            return
+
+        logger.info(f"Starting SMP data loading from {len(target_paths)} files...")
         
-        for file_path in self.file_paths:
+        for file_path in target_paths:
             if not os.path.exists(file_path):
                 logger.warning(f"SMP file not found: {file_path}")
                 continue
