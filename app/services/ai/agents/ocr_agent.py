@@ -37,5 +37,8 @@ class OcrRefinerAgent(LlmAgent):
             if not event.partial:
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] 데이터 정제 완료 (소요시간: {duration:.2f}초)")
-                logger.info(f"[{self.name}] 정제된 데이터: {ctx.session.state.get('settlement_data')}")
+                
+                # event.content에서 직접 데이터를 가져오거나 ctx를 다시 확인
+                refined_data = ctx.session.state.get("settlement_data")
+                logger.info(f"[{self.name}] 정제된 데이터: {refined_data}")
             yield event
