@@ -1,8 +1,11 @@
+import logging
 from google.adk.agents import BaseAgent
 from google.cloud import vision
 import asyncio
 from app.core.gcp import get_vision_client
 from app.services.ai.utils import create_text_event
+
+logger = logging.getLogger(__name__)
 
 class VisionAgent(BaseAgent):
     def __init__(self):
