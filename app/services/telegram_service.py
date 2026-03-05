@@ -109,9 +109,15 @@ class TelegramService:
                 
                 logger.info(f"[Pipeline] Successfully generated analysis for session {session_id}")
                 
+                # 주요 정보 추출
+                entities_text = ""
+                if analysis.main_entities:
+                    entities_text = "\n\n🔍 주요 정보:\n" + "\n".join([f"• {item.key}: {analysis.summary if item.value == analysis.summary else item.value}" for item in analysis.main_entities[:5]])
+
                 response_text = (
-                    f"📝 요약: {analysis.summary}\n\n"
+                    f"📝 요약: {analysis.summary}\n"
                     f"🌐 언어: {analysis.detected_language}"
+                    f"{entities_text}"
                 )
                 await self.send_text_message(chat_id, response_text)
             else:
