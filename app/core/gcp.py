@@ -19,6 +19,11 @@ def get_vision_client() -> vision.ImageAnnotatorClient:
             try:
                 logger.info("[GCP] Using Service Account JSON string from GCP_SA_KEY")
                 info = json.loads(settings.GCP_SA_KEY)
+                
+                # PEM 파일의 \n 문자열을 실제 줄바꿈으로 치환 (가장 중요한 부분)
+                if "private_key" in info:
+                    info["private_key"] = info["private_key"].replace("\\n", "\n")
+                
                 credentials = service_account.Credentials.from_service_account_info(info)
                 _vision_client = vision.ImageAnnotatorClient(credentials=credentials)
             except Exception as e:
