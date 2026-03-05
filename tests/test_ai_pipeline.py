@@ -5,7 +5,7 @@ from google.adk.events.event import Event
 from google.adk.events.event_actions import EventActions
 from google.genai import types
 from app.services.ai.pipeline import pipeline
-from app.schemas.ai import ImageAnalysisResult
+from app.schemas.ai.analysis import ImageAnalysisResult
 from google.adk.agents import LlmAgent
 
 @pytest.mark.asyncio
@@ -19,10 +19,9 @@ async def test_pipeline_execution():
     mock_text_annotation.description = "Extracted text from image"
     mock_vision_response.text_annotations = [mock_text_annotation]
     
-    vision_agent = pipeline.sub_agents[0]
-    
-    # We mock the _client in VisionAgent
-    with patch.object(vision_agent, '_client') as mock_vision_client:
+    # We mock the singleton client provider
+    with patch('app.services.ai.vision_agent.get_vision_client') as mock_get_client:
+        mock_vision_client = mock_get_client.return_value
         mock_vision_client.text_detection.return_value = mock_vision_response
         
         # Mock LlmAgent.run_async to yield a final event and set the state
@@ -69,7 +68,6 @@ async def test_pipeline_execution():
             assert session.state["raw_text"] == "Extracted text from image"
             assert "analysis_result" in session.state
             analysis = session.state["analysis_result"]
-            # When stored in state via state_delta, it might be converted to dict if Pydantic model
             if isinstance(analysis, dict):
                 assert analysis["summary"] == "This is a summary"
                 assert analysis["detected_language"] == "ko"

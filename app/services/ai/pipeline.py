@@ -1,6 +1,6 @@
 from google.adk.agents import SequentialAgent, LlmAgent
 from app.services.ai.vision_agent import VisionAgent
-from app.schemas.ai import ImageAnalysisResult
+from app.schemas.ai.analysis import ImageAnalysisResult
 from app.core.config import settings
 
 def create_analysis_pipeline():
