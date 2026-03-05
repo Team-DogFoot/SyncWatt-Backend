@@ -30,13 +30,13 @@ def load_smp_data(file_paths: list[str]):
         
         try:
             logger.info(f"Processing file: {file_path}")
-            df = pd.read_excel(file_path)
+            df = pd.read_excel(file_path, header=1)
             
             date_col = None
             avg_col = None
             
             for col in df.columns:
-                if any(x in str(col) for x in ['거래일', '날짜', '일자']):
+                if any(x in str(col) for x in ['거래일', '날짜', '일자', '구분']):
                     date_col = col
                 if '평균' in str(col):
                     avg_col = col
@@ -46,7 +46,13 @@ def load_smp_data(file_paths: list[str]):
                 logger.error(error_msg)
                 raise ValueError(error_msg)
 
-            df[date_col] = pd.to_datetime(df[date_col])
+            # Convert date column to string to ensure correct parsing
+            df[date_col] = df[date_col].astype(str)
+            df[date_col] = pd.to_datetime(df[date_col], format='%Y%m%d', errors='coerce')
+            
+            # Remove rows where date parsing failed
+            df = df.dropna(subset=[date_col])
+            
             df['year_month'] = df[date_col].dt.strftime('%Y-%m')
             monthly_avg = df.groupby('year_month')[avg_col].mean().reset_index()
             
