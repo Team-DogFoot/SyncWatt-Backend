@@ -1,134 +1,120 @@
 import httpx
 import logging
+import time
 from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
+from app.schemas.ai.diagnosis import DiagnosisResult
+from app.schemas.ai.settlement import SettlementOcrData
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 logger = logging.getLogger(__name__)
 
 class TelegramService:
+    """
+    텔레그램 봇의 메시지 수신 및 응답을 처리하는 서비스 클래스입니다.
+    """
     def __init__(self):
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.base_url = f"{settings.TELEGRAM_API_URL}{self.bot_token}"
-        # We use a Runner to manage the session and invocation
+        # ADK 실행을 위한 Runner 초기화
         self.runner = InMemoryRunner(agent=pipeline)
         self.runner.auto_create_session = True
-
-    async def get_file_path(self, file_id: str) -> str:
-        """getFile API를 통해 파일의 상대 경로 획득"""
-        async with httpx.AsyncClient() as client:
-            response = await client.get(f"{self.base_url}/getFile", params={"file_id": file_id})
-            response.raise_for_status()
-            return response.json()["result"]["file_path"]
-
-    async def download_image_to_memory(self, file_path: str) -> bytes:
-        """[핵심] 디스크에 저장하지 않고 바이트 데이터를 메모리에 로드"""
-        download_url = f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
-        async with httpx.AsyncClient() as client:
-            response = await client.get(download_url)
-            response.raise_for_status()
-            # bytes로 리턴하여 메모리에서 처리
-            return response.content
+        logger.info("TelegramService가 성공적으로 초기화되었습니다.")
 
     async def send_text_message(self, chat_id: int, text: str):
-        """텍스트 메시지 전송"""
-        async with httpx.AsyncClient() as client:
-            data = {'chat_id': chat_id, 'text': text}
-            response = await client.post(
-                f"{self.base_url}/sendMessage",
-                data=data
-            )
-            response.raise_for_status()
-            logger.info(f"Text message sent to chat_id: {chat_id}")
-
-    async def send_photo_echo(self, chat_id: int, photo_bytes: bytes):
-        """
-        [TEST ONLY] 수신 확인용으로 이미지를 다시 사용자에게 전송
-        (배포 시/OCR 연동 완료 후 삭제 예정)
-        """
-        async with httpx.AsyncClient() as client:
-            files = {'photo': ('echo_test.jpg', photo_bytes, 'image/jpeg')}
-            data = {'chat_id': chat_id, 'caption': "이미지 수신 확인 (In-memory 테스트)"}
-            
-            response = await client.post(
-                f"{self.base_url}/sendPhoto",
-                data=data,
-                files=files,
-                timeout=15.0 # 이미지 업로드 타임아웃 고려
-            )
-            response.raise_for_status()
-            logger.info(f"Test image echoed to chat_id: {chat_id}")
+        """사용자에게 텍스트 메시지를 전송합니다."""
+        try:
+            async with httpx.AsyncClient() as client:
+                data = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
+                response = await client.post(f"{self.base_url}/sendMessage", data=data)
+                response.raise_for_status()
+                logger.debug(f"[Telegram] 메시지 전송 완료 (chat_id: {chat_id})")
+        except Exception as e:
+            logger.error(f"[Telegram] 메시지 전송 실패: {str(e)}")
 
     async def handle_photo_message(self, update: Update):
-        """이미지 처리 비즈니스 로직 메인"""
+        """이미지 메시지를 수신하여 분석 파이프라인을 실행합니다."""
         if not update.message or not update.message.photo:
             return
 
-        import time
-        start_t = time.perf_counter()
+        start_time = time.perf_counter()
         chat_id = update.message.chat.id
+        # 가장 높은 해상도의 사진 선택
         best_photo = update.message.photo[-1]
         file_id = best_photo.file_id
-        user_id = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
+        user_id_str = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
         session_id = f"tg_{chat_id}_{update.message.message_id}"
 
-        logger.info(f"[Telegram] New photo received (chat_id: {chat_id}, user_id: {user_id})")
+        logger.info(f"[Telegram] 새 이미지 수신 (사용자: {user_id_str}, 세션: {session_id})")
 
         try:
-            # 0. 접수 알림
-            await self.send_text_message(chat_id, "🔍 이미지를 확인했습니다. 분석을 시작합니다... (약 5-10초 소요)")
+            # 1. 초기 접수 알림
+            await self.send_text_message(chat_id, "🔍 정산서 이미지를 확인했습니다. 분석을 시작합니다... (약 10~15초 소요)")
 
-            # 1. 파일 경로 획득 및 다운로드
-            file_path = await self.get_file_path(file_id)
-            image_bytes = await self.download_image_to_memory(file_path)
-            logger.info(f"[Telegram] Image downloaded (size: {len(image_bytes)} bytes)")
+            # 2. 이미지 다운로드
+            async with httpx.AsyncClient() as client:
+                # 파일 경로 획득
+                path_resp = await client.get(f"{self.base_url}/getFile", params={"file_id": file_id})
+                path_resp.raise_for_status()
+                file_path = path_resp.json()["result"]["file_path"]
+                
+                # 실제 이미지 데이터 다운로드
+                download_url = f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
+                img_resp = await client.get(download_url)
+                img_resp.raise_for_status()
+                image_bytes = img_resp.content
             
-            # 2. 파이프라인 시작
-            logger.info(f"[Pipeline] Starting AI pipeline (session: {session_id})")
+            logger.info(f"[Telegram] 이미지 다운로드 완료 (크기: {len(image_bytes)} bytes)")
+
+            # 3. ADK 파이프라인 실행
+            logger.info(f"[Pipeline] 분석 파이프라인 가동 시작")
             async for event in self.runner.run_async(
-                user_id=user_id,
+                user_id=user_id_str,
                 session_id=session_id,
                 state_delta={"image_bytes": image_bytes},
-                new_message=types.UserContent(parts=[types.Part(text="Analyze image")])
+                new_message=types.UserContent(parts=[types.Part(text="정산서 분석 시작")])
             ):
-                logger.debug(f"[Pipeline] Event from {event.author}: {event.content}")
+                logger.debug(f"[Pipeline Event] {event.author}: {event.content}")
 
-            # 3. 결과 추출 및 응답
+            # 4. 분석 결과 추출
             session = await self.runner.session_service.get_session(
                 app_name=self.runner.app_name,
-                user_id=user_id,
+                user_id=user_id_str,
                 session_id=session_id
             )
             
             analysis_data = session.state.get("analysis_result")
+            
             if analysis_data:
-                from app.schemas.ai.analysis import ImageAnalysisResult
-                analysis = ImageAnalysisResult.model_validate(analysis_data)
+                # 결과 데이터 파싱 (Pydantic 모델 검증)
+                analysis = DiagnosisResult.model_validate(analysis_data)
                 
-                logger.info(f"[Pipeline] Successfully generated analysis for session {session_id}")
+                # 금액 천단위 콤마 처리
+                loss_formatted = format(int(analysis.opportunity_loss_krw), ",")
                 
-                # 주요 정보 추출
-                entities_text = ""
-                if analysis.main_entities:
-                    entities_text = "\n\n🔍 주요 정보:\n" + "\n".join([f"• {item.key}: {analysis.summary if item.value == analysis.summary else item.value}" for item in analysis.main_entities[:5]])
-
+                # PRD 규격에 맞춘 최종 응답 구성
                 response_text = (
-                    f"📝 요약: {analysis.summary}\n"
-                    f"🌐 언어: {analysis.detected_language}"
-                    f"{entities_text}"
+                    f"📝 *지난달 손실 진단 결과*\n\n"
+                    f"이번 달은 약 *{loss_formatted}원*의 손실이 발생했습니다.\n\n"
+                    f"💡 *진단 원인*\n{analysis.one_line_message}\n\n"
+                    f"🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
                 )
                 await self.send_text_message(chat_id, response_text)
+                logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
             else:
-                logger.warning(f"[Pipeline] No analysis result found for session {session_id}")
-                await self.send_text_message(chat_id, "이미지 분석 결과를 가져오지 못했습니다.")
-            
-            total_duration = time.perf_counter() - start_t
-            logger.info(f"[Telegram] Completed processing photo in {total_duration:.2f}s")
+                logger.warning(f"[Telegram] 분석 결과 누락 (세션: {session_id})")
+                await self.send_text_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
 
+        except httpx.HTTPStatusError as e:
+            logger.error(f"[Telegram] API 통신 에러: {str(e)}")
+            await self.send_text_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
         except Exception as e:
-            logger.error(f"[Telegram] Fatal error during photo processing: {str(e)}", exc_info=True)
-            await self.send_text_message(chat_id, f"처리 중 오류가 발생했습니다: {str(e)}")
+            logger.error(f"[Telegram] 치명적 에러 발생: {str(e)}", exc_info=True)
+            await self.send_text_message(chat_id, f"⚠️ 분석 중 예상치 못한 오류가 발생했습니다: {str(e)}")
+        finally:
+            duration = time.perf_counter() - start_time
+            logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
 
 telegram_service = TelegramService()

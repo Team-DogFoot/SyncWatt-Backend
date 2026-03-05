@@ -1,64 +1,35 @@
-from google.adk.agents import SequentialAgent, LlmAgent
-from app.services.ai.vision_agent import VisionAgent
-from app.services.ai.data_agent import DataFetcherAgent
-from app.schemas.ai.analysis import ImageAnalysisResult
-from app.schemas.ai.settlement import SettlementOcrData
-from app.schemas.ai.diagnosis import DiagnosisResult
-from app.core.config import settings
+import logging
+from google.adk.agents import SequentialAgent
+from app.services.ai.factory import AgentFactory
 
-def create_settlement_pipeline():
-    vision_agent = VisionAgent()
+logger = logging.getLogger(__name__)
+
+def create_mvp_analysis_pipeline() -> SequentialAgent:
+    """
+    SyncWatt MVP의 핵심 로직인 '정산서 분석 및 손실 진단' 파이프라인을 생성합니다.
+    Agent Factory를 사용하여 선언적으로 에이전트들을 조립합니다.
     
-    ocr_refiner = LlmAgent(
-        name="ocr_refiner",
-        model=settings.GEMINI_MODEL,
-        instruction="입력받은 OCR 텍스트에서 정산 정보를 추출하여 정형화된 데이터로 변환하세요. 필요시 세션의 {raw_text}를 참조할 수 있습니다.",
-        output_schema=SettlementOcrData,
-        output_key="settlement_data"
-    )
-
-    data_fetcher = DataFetcherAgent()
-
-    return SequentialAgent(
-        name="settlement_processing_pipeline",
-        sub_agents=[vision_agent, ocr_refiner, data_fetcher]
-    )
-
-def create_analysis_pipeline():
-    vision_agent = VisionAgent()
+    흐름:
+    1. VisionAgent: 이미지에서 텍스트 추출 (raw_text)
+    2. OcrRefinerAgent: 텍스트에서 정산 데이터 추출 (settlement_data)
+    3. DataFetcherAgent: 해당 월의 기상/시장 데이터 조회 (market_data)
+    4. DiagnosisAgent: 최종 손실액 계산 및 진단 (analysis_result)
+    """
+    logger.info("MVP 분석 파이프라인 조립 시작")
     
-    ocr_refiner = LlmAgent(
-        name="ocr_refiner",
-        model=settings.GEMINI_MODEL,
-        instruction="입력받은 OCR 텍스트에서 정산 정보를 추출하여 정형화된 데이터로 변환하세요. 필요시 세션의 {raw_text}를 참조할 수 있습니다.",
-        output_schema=SettlementOcrData,
-        output_key="settlement_data"
+    pipeline = SequentialAgent(
+        name="syncwatt_mvp_pipeline",
+        sub_agents=[
+            AgentFactory.get_vision_agent(),
+            AgentFactory.get_ocr_refiner_agent(),
+            AgentFactory.get_data_fetcher_agent(),
+            AgentFactory.get_diagnosis_agent()
+        ]
     )
+    
+    logger.info("MVP 분석 파이프라인 조립 완료")
+    return pipeline
 
-    data_fetcher = DataFetcherAgent()
-
-    diagnoser = LlmAgent(
-        name="diagnoser",
-        model=settings.GEMINI_MODEL,
-        instruction="""
-입력받은 정산 데이터 {settlement_data}와 외부 시장 데이터 {market_data}를 분석하여 수익 손실 진단을 수행하세요.
-
-진단 기준:
-1. 최적 수익 계산: 해당 월의 기상 기반 최적 발전량과 최적 SMP 단가, 예측 인센티브 추정치를 고려하여 최적 수익을 계산합니다.
-2. 기회 비용 계산: (최적 수익) - {settlement_data}의 실제 수령액
-3. 손실 원인 분류: 날씨(weather), 예측 오류(prediction_error), 시장 가격(market_price), 복합(mixed) 중 하나로 분류합니다.
-4. 원인 메시지 생성: 소장님께 보낼 한 줄 메시지를 생성합니다. (예: "날씨: 이번달 손실 38만원. 일조량이 평균보다 18% 낮았어요.")
-
-최종 결과는 DiagnosisResult 스키마에 맞춰 출력하세요.
-""",
-        output_schema=DiagnosisResult,
-        output_key="diagnosis_result"
-    )
-
-    return SequentialAgent(
-        name="mvp_analysis_pipeline",
-        sub_agents=[vision_agent, ocr_refiner, data_fetcher, diagnoser]
-    )
-
-pipeline = create_settlement_pipeline()
-analysis_pipeline = create_analysis_pipeline()
+# 서비스 전역에서 사용할 파이프라인 인스턴스
+pipeline = create_mvp_analysis_pipeline()
+analysis_pipeline = pipeline
