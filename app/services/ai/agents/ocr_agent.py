@@ -15,7 +15,11 @@ class OcrRefinerAgent(LlmAgent):
             name="ocr_refiner",
             model=settings.GEMINI_MODEL,
             instruction="""
-            입력받은 OCR 텍스트에서 정산 정보를 추출하여 정형화된 데이터로 변환하세요.
+            다음의 OCR 텍스트를 분석하여 정산 정보를 추출하고 정형화된 데이터로 변환하세요.
+            ---
+            OCR 텍스트:
+            {raw_text}
+            ---
             반드시 다음 필드를 포함해야 합니다:
             - 정산 연월 (YYYY-MM 형식. 만약 텍스트에 '2019'가 있다면 반드시 2019로 추출하세요. 절대 현재 연도로 추측하지 마세요.)
             - 실제 발전량 (kWh 단위 숫자만)
@@ -36,6 +40,7 @@ class OcrRefinerAgent(LlmAgent):
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
         raw_text = ctx.session.state.get("raw_text", "")
+        ctx.inputs["raw_text"] = raw_text
         logger.info(f"[{self.name}] OCR 데이터 정제 시작 (입력 텍스트 길이: {len(raw_text)})")
         
         async for event in super()._run_async_impl(ctx):
