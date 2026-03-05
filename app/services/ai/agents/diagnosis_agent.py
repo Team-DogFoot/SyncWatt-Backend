@@ -88,15 +88,6 @@ class DiagnosisAgent(LlmAgent):
             ctx.session.state["settlement_data_json"] = settlement_data.model_dump_json()
             ctx.session.state["market_data_json"] = str(market_data) # market_data는 이미 딕셔너리일 가능성이 높음
             
-            # ctx.inputs에도 설정 (LlmAgent는 기본적으로 ctx.inputs를 사용하여 포맷팅할 수 있음)
-            ctx.inputs.update({
-                "actual_revenue_krw": actual_revenue,
-                "optimal_revenue_krw": optimal,
-                "opportunity_loss_krw": loss,
-                "settlement_data_json": ctx.session.state["settlement_data_json"],
-                "market_data_json": ctx.session.state["market_data_json"]
-            })
-
             logger.info(f"[{self.name}] [Diagnosis Inputs]: Gen={gen}, ActualRev={actual_revenue}, CurrentSMP={smp}")
             logger.info(f"[{self.name}] [Core Calculation]: {gen}kWh * {smp:.2f}원 (SMP) = {optimal}원 (Optimal) vs {actual_revenue}원 (Actual). Result: {loss}원")
 

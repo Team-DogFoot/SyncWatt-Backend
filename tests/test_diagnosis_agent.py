@@ -48,9 +48,10 @@ async def test_diagnosis_agent_precalculates_values():
         assert ctx.session.state["opportunity_loss_krw"] == 50000
         
         # Check if settlement_data is formatted as JSON string for the LLM
-        # This part might need adjustment depending on how we decide to pass it.
-        # If we update ctx.inputs for the LLM call:
-        assert isinstance(ctx.inputs.get("settlement_data_json"), str)
+        # LlmAgent will use session.state.get("settlement_data_json") for the template
+        assert isinstance(ctx.session.state.get("settlement_data_json"), str)
+        assert isinstance(ctx.session.state.get("market_data_json"), str)
+        assert mock_super.called
 
 @pytest.mark.asyncio
 async def test_diagnosis_agent_handles_missing_data():
