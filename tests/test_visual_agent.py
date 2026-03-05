@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 from app.services.ai.agents.visual_agent import DirectVisionAgent
 
 @pytest.mark.asyncio

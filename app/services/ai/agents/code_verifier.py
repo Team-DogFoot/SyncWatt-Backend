@@ -34,9 +34,12 @@ class CodeVerifierAgent(BaseAgent):
         # 필드별 차이점 비교 로그 추가
         if ocr and visual:
             diffs = []
-            if ocr.year_month != visual.year_month: diffs.append(f"year_month ({ocr.year_month} vs {visual.year_month})")
-            if ocr.generation_kwh != visual.generation_kwh: diffs.append(f"generation_kwh ({ocr.generation_kwh} vs {visual.generation_kwh})")
-            if ocr.total_revenue_krw != visual.total_revenue_krw: diffs.append(f"total_revenue_krw ({ocr.total_revenue_krw} vs {visual.total_revenue_krw})")
+            if ocr.year_month != visual.year_month:
+                diffs.append(f"year_month ({ocr.year_month} vs {visual.year_month})")
+            if ocr.generation_kwh != visual.generation_kwh:
+                diffs.append(f"generation_kwh ({ocr.generation_kwh} vs {visual.generation_kwh})")
+            if ocr.total_revenue_krw != visual.total_revenue_krw:
+                diffs.append(f"total_revenue_krw ({ocr.total_revenue_krw} vs {visual.total_revenue_krw})")
             if diffs:
                 logger.info(f"[{self.name}] [Data Discrepancy Found]: {', '.join(diffs)}")
             else:
