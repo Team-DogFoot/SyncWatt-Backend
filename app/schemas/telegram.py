@@ -1,5 +1,15 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
+
+class User(BaseModel):
+    id: int
+    is_bot: bool = False
+    first_name: str
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+
+class Chat(BaseModel):
+    id: int
 
 class PhotoSize(BaseModel):
     file_id: str
@@ -7,12 +17,10 @@ class PhotoSize(BaseModel):
     height: int
     file_size: Optional[int] = None
 
-class Chat(BaseModel):
-    id: int
-
 class Message(BaseModel):
     message_id: int
     chat: Chat
+    from_user: Optional[User] = Field(None, alias="from")
     text: Optional[str] = None
     photo: Optional[List[PhotoSize]] = None
 
