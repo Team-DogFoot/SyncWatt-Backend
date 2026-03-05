@@ -123,6 +123,8 @@ class TelegramService:
                 actual_formatted = format(int(analysis.actual_revenue_krw), ",")
                 recovery_formatted = format(int(analysis.opportunity_loss_krw * 0.4) if analysis.opportunity_loss_krw > 0 else 0, ",")
                 
+                logger.info(f"[Telegram] [Final Outputs]: Loss={loss_formatted}, Optimal={optimal_formatted}, Actual={actual_formatted}, Potential={recovery_formatted}")
+                
                 # DB 저장 (예외 격리)
                 try:
                     self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)

@@ -31,6 +31,17 @@ class CodeVerifierAgent(BaseAgent):
         logger.info(f"[{self.name}] OCR Data: {ocr}")
         logger.info(f"[{self.name}] Visual Data: {visual}")
 
+        # 필드별 차이점 비교 로그 추가
+        if ocr and visual:
+            diffs = []
+            if ocr.year_month != visual.year_month: diffs.append(f"year_month ({ocr.year_month} vs {visual.year_month})")
+            if ocr.generation_kwh != visual.generation_kwh: diffs.append(f"generation_kwh ({ocr.generation_kwh} vs {visual.generation_kwh})")
+            if ocr.total_revenue_krw != visual.total_revenue_krw: diffs.append(f"total_revenue_krw ({ocr.total_revenue_krw} vs {visual.total_revenue_krw})")
+            if diffs:
+                logger.info(f"[{self.name}] [Data Discrepancy Found]: {', '.join(diffs)}")
+            else:
+                logger.info(f"[{self.name}] [Data Match]: OCR and Visual results are identical.")
+
         final_choice = None
         reason = ""
 
@@ -93,11 +104,12 @@ class CodeVerifierAgent(BaseAgent):
         오차 범위 1000원 이내면 정상으로 판단합니다.
         """
         if not data.unit_price or not data.generation_kwh or not data.total_revenue_krw:
+            logger.info(f"[{self.name}] [Integrity Check Skip]: Missing required fields for calculation.")
             return False
         
         expected_revenue = data.unit_price * data.generation_kwh
         diff = abs(expected_revenue - data.total_revenue_krw)
         
         is_valid = diff < 1000
-        logger.debug(f"Integrity check: unit_price({data.unit_price}) * gen({data.generation_kwh}) = {expected_revenue}, actual({data.total_revenue_krw}), diff({diff}) -> {is_valid}")
+        logger.info(f"[{self.name}] [Integrity Check]: {data.unit_price} (Price) * {data.generation_kwh} (Gen) = {expected_revenue:.0f} (Expected) vs {data.total_revenue_krw} (Actual). Diff: {diff:.0f} -> Valid: {is_valid}")
         return is_valid

@@ -49,6 +49,24 @@ class DiagnosisAgent(LlmAgent):
         
         logger.info(f"[{self.name}] 수익 손실 최종 진단 시작")
         
+        # 상세 입력 데이터 로그
+        if settlement_data and market_data:
+            logger.info(f"[{self.name}] [Diagnosis Inputs]: Gen={settlement_data.generation_kwh}, ActualRev={settlement_data.total_revenue_krw}, CurrentSMP={market_data.get('curr_smp')}")
+            
+            # 중간 계산 로직 시뮬레이션 (로그용)
+            gen = settlement_data.generation_kwh
+            smp = market_data.get("curr_smp", 0)
+            optimal = gen * smp
+            loss = optimal - settlement_data.total_revenue_krw
+            logger.info(f"[{self.name}] [Core Calculation]: {gen}kWh * {smp:.2f}원 (SMP) = {optimal:.0f}원 (Optimal) vs {settlement_data.total_revenue_krw}원 (Actual). Result: {loss:.0f}원")
+
+            # 날씨 비교 로그
+            curr_irr = market_data.get("curr_irr", 0)
+            prev_irr = market_data.get("prev_year_irr", 0)
+            if prev_irr > 0:
+                irr_diff = (curr_irr - prev_irr) / prev_irr * 100
+                logger.info(f"[{self.name}] [Weather Comparison]: Current Irr={curr_irr}, Prev Year Irr={prev_irr}. Diff={irr_diff:.1f}%")
+        
         # market_data가 없거나 비어있는 경우(KeyError 방지용 빈 객체 포함)
         if not market_data or market_data.get("curr_smp") == 0:
             logger.warning(f"[{self.name}] 필수 시장 데이터 누락으로 분석을 진행할 수 없습니다.")

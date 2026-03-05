@@ -42,4 +42,10 @@ class OcrRefinerAgent(LlmAgent):
             if not event.partial:
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] 데이터 정제 프로세스 완료 (소요시간: {duration:.2f}초)")
+                
+                refined_data = ctx.session.state.get("settlement_data")
+                if refined_data:
+                    logger.info(f"[{self.name}] [Result JSON]: {refined_data.model_dump_json(indent=2)}")
+                else:
+                    logger.error(f"[{self.name}] [Error]: Refined data is None after LLM processing.")
             yield event
