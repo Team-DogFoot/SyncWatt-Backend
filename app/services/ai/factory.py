@@ -4,7 +4,7 @@ from app.services.ai.agents.ocr_agent import OcrRefinerAgent
 from app.services.ai.agents.data_agent import DataFetcherAgent
 from app.services.ai.agents.diagnosis_agent import DiagnosisAgent
 from app.services.ai.agents.visual_agent import DirectVisionAgent
-from app.services.ai.vision_agent import VisionAgent
+from app.services.ai.agents.vision_agent import VisionAgent
 
 logger = logging.getLogger(__name__)
 
