@@ -66,39 +66,36 @@ class TelegramService:
         if not update.message or not update.message.photo:
             return
 
+        import time
+        start_t = time.perf_counter()
         chat_id = update.message.chat.id
-        # 가장 해상도가 높은 이미지 선택
         best_photo = update.message.photo[-1]
         file_id = best_photo.file_id
+        user_id = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
+        session_id = f"tg_{chat_id}_{update.message.message_id}"
+
+        logger.info(f"[Telegram] New photo received (chat_id: {chat_id}, user_id: {user_id})")
 
         try:
-            # 0. 사용자에게 접수 확인 메시지 전송 (UX 개선)
+            # 0. 접수 알림
             await self.send_text_message(chat_id, "🔍 이미지를 확인했습니다. 분석을 시작합니다... (약 5-10초 소요)")
 
-            # 1. 파일 경로 획득
+            # 1. 파일 경로 획득 및 다운로드
             file_path = await self.get_file_path(file_id)
-            # 2. 인메모리 다운로드
             image_bytes = await self.download_image_to_memory(file_path)
+            logger.info(f"[Telegram] Image downloaded (size: {len(image_bytes)} bytes)")
             
-            logger.info(f"Image processed in-memory: {len(image_bytes)} bytes")
-            
-            # 3. [TEST] 수신 확인용 Echo 전송 (나중에 삭제 예정)
-            # await self.send_photo_echo(chat_id, image_bytes)
-            
-            # 4. ADK 파이프라인 실행
-            user_id = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
-            session_id = f"tg_{chat_id}_{update.message.message_id}"
-
-            # runner.run_async yields events, we consume them to finish the run
+            # 2. 파이프라인 시작
+            logger.info(f"[Pipeline] Starting AI pipeline (session: {session_id})")
             async for event in self.runner.run_async(
                 user_id=user_id,
                 session_id=session_id,
                 state_delta={"image_bytes": image_bytes},
                 new_message=types.UserContent(parts=[types.Part(text="Analyze image")])
             ):
-                logger.debug(f"ADK Event: {event.author} - {event.content}")
+                logger.debug(f"[Pipeline] Event from {event.author}: {event.content}")
 
-            # 결과 추출 (analysis_result는 SequentialAgent의 마지막 결과로 세션에 저장됨)
+            # 3. 결과 추출 및 응답
             session = await self.runner.session_service.get_session(
                 app_name=self.runner.app_name,
                 user_id=user_id,
@@ -107,9 +104,10 @@ class TelegramService:
             
             analysis_data = session.state.get("analysis_result")
             if analysis_data:
-                # dict이나 모델 어떤 상태로든 올 수 있는 데이터를 안전하게 Pydantic 모델로 변환
                 from app.schemas.ai.analysis import ImageAnalysisResult
                 analysis = ImageAnalysisResult.model_validate(analysis_data)
+                
+                logger.info(f"[Pipeline] Successfully generated analysis for session {session_id}")
                 
                 response_text = (
                     f"📝 요약: {analysis.summary}\n\n"
@@ -117,10 +115,14 @@ class TelegramService:
                 )
                 await self.send_text_message(chat_id, response_text)
             else:
+                logger.warning(f"[Pipeline] No analysis result found for session {session_id}")
                 await self.send_text_message(chat_id, "이미지 분석 결과를 가져오지 못했습니다.")
             
+            total_duration = time.perf_counter() - start_t
+            logger.info(f"[Telegram] Completed processing photo in {total_duration:.2f}s")
+
         except Exception as e:
-            logger.error(f"Telegram image processing error: {e}", exc_info=True)
+            logger.error(f"[Telegram] Fatal error during photo processing: {str(e)}", exc_info=True)
             await self.send_text_message(chat_id, f"처리 중 오류가 발생했습니다: {str(e)}")
 
 telegram_service = TelegramService()
