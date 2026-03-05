@@ -2,6 +2,8 @@ import httpx
 import logging
 from app.core.config import settings
 from app.schemas.telegram import Update
+from app.services.ai.pipeline import pipeline
+from google.adk.sessions.session import Session
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,17 @@ class TelegramService:
             response.raise_for_status()
             # bytes로 리턴하여 메모리에서 처리
             return response.content
+
+    async def send_text_message(self, chat_id: int, text: str):
+        """텍스트 메시지 전송"""
+        async with httpx.AsyncClient() as client:
+            data = {'chat_id': chat_id, 'text': text}
+            response = await client.post(
+                f"{self.base_url}/sendMessage",
+                data=data
+            )
+            response.raise_for_status()
+            logger.info(f"Text message sent to chat_id: {chat_id}")
 
     async def send_photo_echo(self, chat_id: int, photo_bytes: bytes):
         """
@@ -63,12 +76,29 @@ class TelegramService:
             logger.info(f"Image processed in-memory: {len(image_bytes)} bytes")
             
             # 3. [TEST] 수신 확인용 Echo 전송 (나중에 삭제 예정)
-            await self.send_photo_echo(chat_id, image_bytes)
+            # await self.send_photo_echo(chat_id, image_bytes)
             
-            # TODO: OCR 서비스 연동 로직
-            # result = await ocr_service.process(image_bytes)
+            # 4. ADK 파이프라인 실행
+            session = Session(state={"image_bytes": image_bytes})
+            
+            # pipeline.run_async yields events, we consume them to finish the run
+            async for event in pipeline.run_async(session=session):
+                logger.debug(f"ADK Event: {event.author} - {event.content}")
+
+            # 결과 추출 (analysis_result는 SequentialAgent의 마지막 결과로 세션에 저장됨)
+            analysis = session.state.get("analysis_result")
+            if analysis:
+                response_text = (
+                    f"📝 요약: {analysis.summary}\n\n"
+                    f"🌐 언어: {analysis.detected_language}\n\n"
+                    f"📊 추출 데이터: {analysis.extracted_data}"
+                )
+                await self.send_text_message(chat_id, response_text)
+            else:
+                await self.send_text_message(chat_id, "이미지 분석 결과를 가져오지 못했습니다.")
             
         except Exception as e:
             logger.error(f"Telegram image processing error: {e}")
+            await self.send_text_message(chat_id, f"처리 중 오류가 발생했습니다: {str(e)}")
 
 telegram_service = TelegramService()
