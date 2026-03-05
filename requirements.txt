@@ -4,3 +4,5 @@ httpx
 pydantic-settings
 python-dotenv
 python-multipart
+google-adk
+google-cloud-vision

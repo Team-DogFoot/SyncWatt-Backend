@@ -8,6 +8,11 @@ class Settings(BaseSettings):
     # 텔레그램 API 베이스 URL
     TELEGRAM_API_URL: str = "https://api.telegram.org/bot"
 
+    # Google Cloud & Gemini Settings
+    GOOGLE_APPLICATION_CREDENTIALS: str | None = None
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
