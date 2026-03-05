@@ -82,3 +82,35 @@ async def test_diagnosis_agent_handles_missing_data():
     assert result.year_month == "2024-02"
     assert result.opportunity_loss_krw == 0
     assert "데이터가 부족하여" in result.one_line_message
+
+@pytest.mark.asyncio
+async def test_diagnosis_agent_handles_error_smp_flag():
+    agent = DiagnosisAgent()
+    ctx = MagicMock()
+    
+    settlement_data = SettlementOcrData(
+        year_month="2024-02",
+        generation_kwh=1000.0,
+        total_revenue_krw=150000,
+        address="Test Address",
+        customer_name="Test User",
+        plant_name="Test Plant"
+    )
+    
+    ctx.session.state = {
+        "settlement_data": settlement_data,
+        "market_data": {
+            "error_smp": True,
+            "curr_smp": None
+        }
+    }
+    ctx.inputs = {}
+    
+    events = []
+    async for event in agent._run_async_impl(ctx):
+        events.append(event)
+    
+    last_event = events[-1]
+    assert "analysis_result" in last_event.actions.state_delta
+    result = last_event.actions.state_delta["analysis_result"]
+    assert "데이터가 부족하여" in result.one_line_message

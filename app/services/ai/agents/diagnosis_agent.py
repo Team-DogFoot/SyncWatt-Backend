@@ -49,9 +49,9 @@ class DiagnosisAgent(LlmAgent):
         
         logger.info(f"[{self.name}] 수익 손실 최종 진단 시작")
         
-        # market_data가 없거나 비어있는 경우(KeyError 방지용 빈 객체 포함)
-        if not market_data or market_data.get("curr_smp") == 0:
-            logger.warning(f"[{self.name}] 필수 시장 데이터 누락으로 분석을 진행할 수 없습니다.")
+        # market_data가 없거나 필수 데이터(curr_smp)가 누락된 경우
+        if not market_data or market_data.get("error_smp") or market_data.get("curr_smp") is None:
+            logger.warning(f"[{self.name}] 필수 시장 데이터 누락으로 분석을 진행할 수 없습니다. (error_smp={market_data.get('error_smp') if market_data else 'N/A'})")
             # 진단 불가 결과 수동 생성
             error_result = DiagnosisResult(
                 year_month=settlement_data.year_month if settlement_data else "UNKNOWN",
@@ -73,7 +73,7 @@ class DiagnosisAgent(LlmAgent):
         # 사전 계산 및 세션 상태 업데이트
         if settlement_data and market_data:
             gen = settlement_data.generation_kwh
-            smp = market_data.get("curr_smp", 0)
+            smp = market_data.get("curr_smp") or 0
             actual_revenue = settlement_data.total_revenue_krw
             
             optimal = int(gen * smp)
