@@ -2,6 +2,7 @@ import logging
 from fastapi import FastAPI
 from app.api.webhook import router as webhook_router
 from app.core.config import settings
+from app.db.session import init_db
 
 # 로깅 설정 최적화
 logging.basicConfig(
@@ -9,8 +10,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-from app.db.session import init_db
 
 app = FastAPI(title="SyncWatt-Backend", version="0.1.0")
 

@@ -39,7 +39,6 @@ class DataFetcherAgent(BaseAgent):
             
             # 3. Last year same month for Irradiance comparison
             prev_year_dt = curr_dt.replace(year=year - 1)
-            prev_year_month_last = prev_year_dt.strftime("%Y-%m")
 
             # 4. Fetch SMP (Current vs Prev Month)
             curr_smp = smp_service.get_avg_smp(year_month)
@@ -56,12 +55,18 @@ class DataFetcherAgent(BaseAgent):
             stn_id = "108" # Default (Seoul)
             if address:
                 # 간단한 주소-관측소 매핑 로직 (MVP용)
-                if "부산" in address: stn_id = "159"
-                elif "대구" in address: stn_id = "143"
-                elif "광주" in address: stn_id = "156"
-                elif "대전" in address: stn_id = "133"
-                elif "울산" in address: stn_id = "152"
-                elif "제주" in address: stn_id = "184"
+                if "부산" in address:
+                    stn_id = "159"
+                elif "대구" in address:
+                    stn_id = "143"
+                elif "광주" in address:
+                    stn_id = "156"
+                elif "대전" in address:
+                    stn_id = "133"
+                elif "울산" in address:
+                    stn_id = "152"
+                elif "제주" in address:
+                    stn_id = "184"
                 logger.info(f"[{self.name}] Address found: {address}. Using stn_id: {stn_id}")
             else:
                 logger.info(f"[{self.name}] No address found. Using national average (Seoul 108 as proxy).")

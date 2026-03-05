@@ -165,15 +165,3 @@ class TelegramService:
             logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
 
 telegram_service = TelegramService()
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"[Telegram] API 통신 에러: {str(e)}")
-            await self.send_text_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
-        except Exception as e:
-            logger.error(f"[Telegram] 치명적 에러 발생: {str(e)}", exc_info=True)
-            await self.send_text_message(chat_id, f"⚠️ 분석 중 예상치 못한 오류가 발생했습니다: {str(e)}")
-        finally:
-            duration = time.perf_counter() - start_time
-            logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
-
-telegram_service = TelegramService()
