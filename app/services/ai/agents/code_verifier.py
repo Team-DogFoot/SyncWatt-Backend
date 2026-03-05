@@ -64,13 +64,20 @@ class CodeVerifierAgent(BaseAgent):
             elif visual_valid and not ocr_valid:
                 final_choice = visual
                 reason = "수치 정합성이 맞는 시각 분석 결과를 채택했습니다."
-            elif ocr == visual:
+            elif self._is_same(ocr, visual):
                 final_choice = ocr
-                reason = "두 결과가 일치하여 채택했습니다."
+                reason = "두 결과가 주요 필드에서 일치하여 채택했습니다."
             else:
-                # 둘 다 정합성이 맞거나 둘 다 틀린 경우 -> 공급가액이 더 큰(또는 존재하는) OCR 우선 (기본 전략)
-                final_choice = ocr
-                reason = "두 결과가 다르지만 OCR 결과를 기본으로 채택했습니다 (정밀 검정 필요)."
+                # 둘 다 정합성이 맞거나 둘 다 틀린 경우 -> 오차가 더 적은 것 선택
+                ocr_diff = self._get_integrity_diff(ocr)
+                vis_diff = self._get_integrity_diff(visual)
+                
+                if ocr_diff <= vis_diff:
+                    final_choice = ocr
+                    reason = f"두 결과가 다르므로 수치 오차가 더 적은 OCR 결과를 채택했습니다 (OCR 오차: {ocr_diff:.0f}, Visual 오차: {vis_diff:.0f})."
+                else:
+                    final_choice = visual
+                    reason = f"두 결과가 다르므로 수치 오차가 더 적은 시각 분석 결과를 채택했습니다 (OCR 오차: {ocr_diff:.0f}, Visual 오차: {vis_diff:.0f})."
 
         if final_choice:
             final_choice.selection_reason = reason
@@ -98,18 +105,37 @@ class CodeVerifierAgent(BaseAgent):
         except Exception:
             return None
 
+    def _is_same(self, ocr: SettlementOcrData, visual: SettlementOcrData) -> bool:
+        """
+        주요 필드(연월, 발전량, 총 수령액)가 일치하는지 확인합니다.
+        """
+        return (
+            ocr.year_month == visual.year_month and
+            ocr.generation_kwh == visual.generation_kwh and
+            ocr.total_revenue_krw == visual.total_revenue_krw
+        )
+
+    def _get_integrity_diff(self, data: SettlementOcrData) -> float:
+        """
+        수치 정합성 오차를 계산합니다.
+        """
+        if not data.unit_price or not data.generation_kwh or not data.total_revenue_krw:
+            return float('inf')
+        expected_revenue = data.unit_price * data.generation_kwh
+        return abs(expected_revenue - data.total_revenue_krw)
+
     def _check_integrity(self, data: SettlementOcrData) -> bool:
         """
         단가 * 발전량 ≈ 총 수령액(공급가액) 인지 확인합니다.
-        오차 범위 1000원 이내면 정상으로 판단합니다.
+        오차 범위: max(1000, 총 수령액 * 0.02) 이내면 정상으로 판단합니다.
         """
         if not data.unit_price or not data.generation_kwh or not data.total_revenue_krw:
             logger.info(f"[{self.name}] [Integrity Check Skip]: Missing required fields for calculation.")
             return False
         
-        expected_revenue = data.unit_price * data.generation_kwh
-        diff = abs(expected_revenue - data.total_revenue_krw)
+        diff = self._get_integrity_diff(data)
+        tolerance = max(1000, data.total_revenue_krw * 0.02)
         
-        is_valid = diff < 1000
-        logger.info(f"[{self.name}] [Integrity Check]: {data.unit_price} (Price) * {data.generation_kwh} (Gen) = {expected_revenue:.0f} (Expected) vs {data.total_revenue_krw} (Actual). Diff: {diff:.0f} -> Valid: {is_valid}")
+        is_valid = diff <= tolerance
+        logger.info(f"[{self.name}] [Integrity Check]: Diff: {diff:.0f}, Tolerance: {tolerance:.0f} -> Valid: {is_valid}")
         return is_valid

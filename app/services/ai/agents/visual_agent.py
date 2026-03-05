@@ -33,6 +33,13 @@ class DirectVisionAgent(LlmAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] 이미지 직접 시각 분석 시작")
         
+        image_bytes = ctx.session.state.get("image_bytes")
+        if image_bytes:
+            if not hasattr(ctx, "inputs") or ctx.inputs is None:
+                ctx.inputs = {}
+            ctx.inputs["image"] = image_bytes
+            logger.info(f"[{self.name}] 이미지 데이터를 LLM 입력에 주입했습니다. (크기: {len(image_bytes)} bytes)")
+        
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
