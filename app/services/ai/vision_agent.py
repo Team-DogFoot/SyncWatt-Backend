@@ -47,4 +47,9 @@ class VisionAgent(BaseAgent):
             )
         except Exception as e:
             logger.error(f"[{self.name}] Error during vision detection: {str(e)}", exc_info=True)
-            yield create_text_event(self.name, f"Error: {str(e)}")
+            # 다음 Agent의 KeyError를 방지하기 위해 빈 텍스트라도 상태에 저장
+            yield create_text_event(
+                self.name, 
+                f"Error: {str(e)}",
+                state_delta={"raw_text": ""}
+            )
