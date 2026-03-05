@@ -24,6 +24,10 @@ class Message(BaseModel):
     text: Optional[str] = None
     photo: Optional[List[PhotoSize]] = None
 
+    model_config = {"populate_by_name": True}
+
 class Update(BaseModel):
     update_id: int
     message: Optional[Message] = None
+    
+    model_config = {"populate_by_name": True}

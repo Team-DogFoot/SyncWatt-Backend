@@ -17,8 +17,8 @@ First, create a standard Kubernetes Secret locally without applying it to the cl
 
 ```bash
 kubectl create secret generic syncwatt-secret \
-  --from-literal=TELEGRAM_TOKEN='your-telegram-token' \
-  --from-literal=WH_SECRET_TOKEN='your-webhook-secret' \
+  --from-literal=TELEGRAM_BOT_TOKEN='your-telegram-token' \
+  --from-literal=WEBHOOK_SECRET_TOKEN='your-webhook-secret' \
   --dry-run=client -o yaml > secret.yaml
 ```
 
