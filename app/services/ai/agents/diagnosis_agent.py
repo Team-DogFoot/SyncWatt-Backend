@@ -17,6 +17,10 @@ class DiagnosisAgent(LlmAgent):
             instruction="""
             입력받은 정산 데이터 {settlement_data}와 외부 시장 데이터 {market_data}를 분석하여 수익 손실 진단을 수행하세요.
 
+            지침:
+            - 반드시 {market_data}에 포함된 'curr_smp'와 'prev_smp' 값을 사용하여 계산하세요. 데이터가 없거나 0이면 원인 불명으로 처리하세요.
+            - 실제 발전량과 실제 수령액은 {settlement_data}의 값을 따르세요.
+
             계산 공식:
             1. 최적 수익 = {settlement_data}.generation_kwh * {market_data}.curr_smp
             2. 손실액 = 최적 수익 - {settlement_data}.total_revenue_krw

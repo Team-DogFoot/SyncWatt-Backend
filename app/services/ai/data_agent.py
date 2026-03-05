@@ -42,6 +42,8 @@ class DataFetcherAgent(BaseAgent):
             curr_smp = smp_service.get_avg_smp(year_month)
             prev_smp = smp_service.get_avg_smp(prev_year_month)
             
+            logger.info(f"[{self.name}] DB SMP lookup: {year_month} -> {curr_smp}, {prev_year_month} -> {prev_smp}")
+            
             if curr_smp is None or prev_smp is None:
                 missing_msg = f"[{self.name}] SMP data missing for {year_month} or {prev_year_month}. Diagnosis cannot proceed."
                 logger.error(missing_msg)

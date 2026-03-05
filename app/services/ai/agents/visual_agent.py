@@ -16,7 +16,11 @@ class DirectVisionAgent(LlmAgent):
             model=settings.GEMINI_MODEL,
             instruction="""
             이 이미지는 태양광 발전소 정산서입니다. 
-            이미지를 직접 보고 정산 연월, 실제 발전량, 실제 총 수령액을 추출하세요. 
+            이미지를 직접 보고 다음 정보를 정확하게 추출하세요:
+            - 정산 연월 (YYYY-MM 형식)
+            - 실제 발전량 (kWh 단위, '발전량' 항목 확인)
+            - 실제 총 수령액 (원 단위, 반드시 '공급가액' 항목을 추출하세요. 부가세 포함 금액과 혼동 주의)
+            
             출력은 SettlementOcrData 스키마를 따르세요.
             """,
             output_schema=SettlementOcrData,
