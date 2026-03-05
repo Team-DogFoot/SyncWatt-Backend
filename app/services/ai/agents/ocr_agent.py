@@ -40,7 +40,6 @@ class OcrRefinerAgent(LlmAgent):
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
         raw_text = ctx.session.state.get("raw_text", "")
-        ctx.inputs["raw_text"] = raw_text
         logger.info(f"[{self.name}] OCR 데이터 정제 시작 (입력 텍스트 길이: {len(raw_text)})")
         
         async for event in super()._run_async_impl(ctx):

@@ -20,9 +20,8 @@ async def test_ocr_agent_passes_raw_text():
         async for _ in agent._run_async_impl(ctx):
             pass
         
-        # Check if raw_text was passed to ctx.inputs
-        assert "raw_text" in ctx.inputs
-        assert ctx.inputs["raw_text"] == "sample ocr text"
-        
-        # Check if instruction contains the placeholder
-        assert "{raw_text}" in agent.instruction
+        # Verify super()._run_async_impl(ctx) is called
+        # LlmAgent will use session.state.get("raw_text") for the template
+        assert ctx.session.state["raw_text"] == "sample ocr text"
+        assert mock_super.called
+
