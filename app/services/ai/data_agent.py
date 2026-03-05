@@ -38,8 +38,6 @@ class DataFetcherAgent(BaseAgent):
             prev_year_month = prev_month_dt.strftime("%Y-%m")
             
             # 3. Last year same month for Irradiance comparison
-            prev_year_dt = curr_dt.replace(year=year - 1)
-
             # 4. Fetch SMP (Current vs Prev Month)
             curr_smp = smp_service.get_avg_smp(year_month)
             prev_smp = smp_service.get_avg_smp(prev_year_month)
