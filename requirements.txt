@@ -6,3 +6,8 @@ python-dotenv
 python-multipart
 google-adk
 google-cloud-vision
+sqlalchemy
+aiosqlite
+asyncpg
+pytest
+pytest-asyncio
