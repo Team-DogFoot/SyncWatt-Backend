@@ -3,6 +3,8 @@ from typing import Dict, Any
 from app.services.ai.agents.ocr_agent import OcrRefinerAgent
 from app.services.ai.agents.data_agent import DataFetcherAgent
 from app.services.ai.agents.diagnosis_agent import DiagnosisAgent
+from app.services.ai.agents.visual_agent import DirectVisionAgent
+from app.services.ai.agents.verifier_agent import VerifierAgent
 from app.services.ai.vision_agent import VisionAgent
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,16 @@ class AgentFactory:
     def get_ocr_refiner_agent(cls) -> OcrRefinerAgent:
         """OCR 텍스트를 정산 데이터로 정제하는 에이전트를 반환합니다."""
         return cls._get_cached_instance(OcrRefinerAgent)
+
+    @classmethod
+    def get_visual_agent(cls) -> DirectVisionAgent:
+        """이미지를 직접 분석하는 시각 에이전트를 반환합니다."""
+        return cls._get_cached_instance(DirectVisionAgent)
+
+    @classmethod
+    def get_verifier_agent(cls) -> VerifierAgent:
+        """추출 결과를 검증하고 최종 선택하는 에이전트를 반환합니다."""
+        return cls._get_cached_instance(VerifierAgent)
 
     @classmethod
     def get_data_fetcher_agent(cls) -> DataFetcherAgent:

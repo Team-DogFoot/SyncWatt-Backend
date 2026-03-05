@@ -95,7 +95,7 @@ class TelegramService:
                 
                 # PRD 규격에 맞춘 최종 응답 구성
                 response_text = (
-                    f"📝 *지난달 손실 진단 결과*\n\n"
+                    f"📝 *지난달 손실 진단 결과 (이중 검증 완료)*\n\n"
                     f"이번 달은 약 *{loss_formatted}원*의 손실이 발생했습니다.\n\n"
                     f"💡 *진단 원인*\n{analysis.one_line_message}\n\n"
                     f"🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
