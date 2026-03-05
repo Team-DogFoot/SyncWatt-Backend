@@ -72,6 +72,9 @@ class TelegramService:
         file_id = best_photo.file_id
 
         try:
+            # 0. 사용자에게 접수 확인 메시지 전송 (UX 개선)
+            await self.send_text_message(chat_id, "🔍 이미지를 확인했습니다. 분석을 시작합니다... (약 5-10초 소요)")
+
             # 1. 파일 경로 획득
             file_path = await self.get_file_path(file_id)
             # 2. 인메모리 다운로드
@@ -102,19 +105,15 @@ class TelegramService:
                 session_id=session_id
             )
             
-            analysis = session.state.get("analysis_result")
-            if analysis:
-                # analysis could be a dict or a pydantic model depending on implementation
-                if isinstance(analysis, dict):
-                    summary = analysis.get("summary")
-                    lang = analysis.get("detected_language")
-                else:
-                    summary = getattr(analysis, "summary", "N/A")
-                    lang = getattr(analysis, "detected_language", "N/A")
-
+            analysis_data = session.state.get("analysis_result")
+            if analysis_data:
+                # dict이나 모델 어떤 상태로든 올 수 있는 데이터를 안전하게 Pydantic 모델로 변환
+                from app.schemas.ai.analysis import ImageAnalysisResult
+                analysis = ImageAnalysisResult.model_validate(analysis_data)
+                
                 response_text = (
-                    f"📝 요약: {summary}\n\n"
-                    f"🌐 언어: {lang}"
+                    f"📝 요약: {analysis.summary}\n\n"
+                    f"🌐 언어: {analysis.detected_language}"
                 )
                 await self.send_text_message(chat_id, response_text)
             else:

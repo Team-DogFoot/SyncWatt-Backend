@@ -20,15 +20,15 @@ class VisionAgent(BaseAgent):
         client = get_vision_client()
         
         # Run synchronous GCP call in a thread pool to maintain async integrity
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, client.text_detection, image)
+        response = await asyncio.to_thread(client.text_detection, image=image)
         
         texts = response.text_annotations
         extracted_text = texts[0].description if texts else ""
         
-        # Rely on EventActions for state propagation as per ADK architecture
+        # 텍스트 자체를 content로 내보내어 다음 Agent가 자연스럽게 받도록 함
+        # 동시에 다른 Agent가 상태에서 조회할 수 있게 state_delta도 유지
         yield create_text_event(
             self.name, 
-            f"Extracted {len(extracted_text)} characters.",
+            extracted_text,
             state_delta={"raw_text": extracted_text}
         )
