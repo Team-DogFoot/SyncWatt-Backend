@@ -3,6 +3,7 @@ import time
 from google.adk.agents import LlmAgent
 from app.schemas.ai.diagnosis import DiagnosisResult
 from app.core.config import settings
+from app.services.ai.utils import create_text_event
 
 logger = logging.getLogger(__name__)
 
