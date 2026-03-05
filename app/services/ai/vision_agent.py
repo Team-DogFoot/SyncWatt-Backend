@@ -1,5 +1,5 @@
 from google.adk.agents import BaseAgent
-from google.adk.types import Event
+from google.adk.events.event import Event
 from google.cloud import vision
 import asyncio
 
