@@ -13,16 +13,29 @@ async def telegram_webhook(
     background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: str | None = Header(None)
 ):
-    logger.info(f"Webhook received update_id: {update.update_id}")
-    
-    # 보안: 텔레그램 설정 시 지정한 시크릿 토큰 검증
-    if settings.WEBHOOK_SECRET_TOKEN and x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET_TOKEN:
-        logger.warning("Invalid secret token received")
-        raise HTTPException(status_code=403, detail="Invalid secret token")
+    # 보안: 시크릿 토큰 검증 로그 (토큰 자체는 절대 찍지 않음)
+    if settings.WEBHOOK_SECRET_TOKEN:
+        if x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET_TOKEN:
+            logger.warning(f"[Webhook] Unauthorized request: Invalid secret token (Update ID: {update.update_id})")
+            raise HTTPException(status_code=403, detail="Invalid secret token")
+        logger.debug(f"[Webhook] Secret token verified for update_id: {update.update_id}")
 
+    # 메시지 기본 정보 로깅
+    chat_id = "N/A"
+    username = "unknown"
+    if update.message:
+        chat_id = update.message.chat.id
+        username = update.message.from_user.username if update.message.from_user else "no-user"
+
+    logger.info(f"[Webhook] Incoming update: {update.update_id} | Chat: {chat_id} | From: @{username}")
+    
     # 이미지가 포함된 메시지인 경우 백그라운드에서 처리
     if update.message and update.message.photo:
-        logger.info(f"Photo received from chat_id: {update.message.chat.id}")
+        logger.info(f"[Webhook] Photo update detected (Photo count: {len(update.message.photo)})")
         background_tasks.add_task(telegram_service.handle_photo_message, update)
+    elif update.message and update.message.text:
+        logger.info(f"[Webhook] Text update detected: {update.message.text[:50]}...")
+    else:
+        logger.info(f"[Webhook] Other update type received (id: {update.update_id})")
 
     return {"ok": True}
