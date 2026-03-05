@@ -6,15 +6,19 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/webhook", tags=["Telegram"])
-
 @router.post("/telegram")
 async def telegram_webhook(
-    update: Update,
+    update_raw: dict, # Update 모델 대신 dict로 받아 검증 오류 방지
     background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: str | None = Header(None)
 ):
     try:
+        logger.info(f"[Webhook] Raw Data Received: {update_raw}")
+        # 수동으로 모델 변환 시도 (여기서 에러가 나면 원인 파악 가능)
+        update = Update.model_validate(update_raw)
+
         # 보안: 시크릿 토큰 검증 로그 (토큰 자체는 절대 찍지 않음)
+...
         if settings.WEBHOOK_SECRET_TOKEN:
             if x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET_TOKEN:
                 logger.warning(f"[Webhook] Unauthorized request: Invalid secret token (Update ID: {update.update_id})")
