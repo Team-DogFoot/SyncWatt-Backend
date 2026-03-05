@@ -47,7 +47,12 @@ class DataFetcherAgent(BaseAgent):
             if curr_smp is None or prev_smp is None:
                 missing_msg = f"[{self.name}] SMP data missing for {year_month} or {prev_year_month}. Diagnosis cannot proceed."
                 logger.error(missing_msg)
-                yield create_text_event(self.name, f"시장 가격(SMP) 데이터가 부족하여 분석을 진행할 수 없습니다. (대상 월: {year_month})")
+                # market_data 키는 생성하되 빈 값을 넣어 뒤 단계의 KeyError 방지
+                yield create_text_event(
+                    self.name, 
+                    f"시장 가격(SMP) 데이터가 부족하여 분석을 진행할 수 없습니다. (대상 월: {year_month})",
+                    state_delta={"market_data": {"year_month": year_month, "curr_smp": 0, "prev_smp": 0, "curr_irr": 0, "prev_year_irr": 0}}
+                )
                 return
             
             # 5. Fetch Irradiance (Current vs Last Year Same Month)

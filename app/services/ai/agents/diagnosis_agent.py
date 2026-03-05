@@ -47,17 +47,32 @@ class DiagnosisAgent(LlmAgent):
         market_data = ctx.session.state.get("market_data")
         
         logger.info(f"[{self.name}] 수익 손실 최종 진단 시작")
-        logger.debug(f"[{self.name}] Input Settlement Data: {settlement_data}")
-        logger.debug(f"[{self.name}] Input Market Data: {market_data}")
         
+        # market_data가 없거나 비어있는 경우(KeyError 방지용 빈 객체 포함)
+        if not market_data or market_data.get("curr_smp") == 0:
+            logger.warning(f"[{self.name}] 필수 시장 데이터 누락으로 분석을 진행할 수 없습니다.")
+            # 진단 불가 결과 수동 생성
+            from app.schemas.ai.diagnosis import DiagnosisResult, LossCause
+            
+            error_result = DiagnosisResult(
+                year_month=settlement_data.year_month if settlement_data else "UNKNOWN",
+                actual_revenue_krw=settlement_data.total_revenue_krw if settlement_data else 0,
+                optimal_revenue_krw=0,
+                opportunity_loss_krw=0,
+                loss_cause=LossCause.UNKNOWN,
+                one_line_message="시장 가격(SMP) 데이터가 부족하여 진단을 수행할 수 없습니다.",
+                address_used=True if settlement_data and settlement_data.address else False
+            )
+            
+            yield create_text_event(
+                self.name,
+                "데이터 부족으로 인한 진단 실패",
+                state_delta={"analysis_result": error_result}
+            )
+            return
+
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 최종 진단 완료 (소요시간: {duration:.2f}초)")
-                
-                result = ctx.session.state.get("analysis_result")
-                if result:
-                    logger.info(f"[{self.name}] 진단 결과: {result.model_dump()}")
-                else:
-                    logger.error(f"[{self.name}] 진단 실패: 결과가 None입니다. 데이터 부족 또는 파싱 에러.")
+                logger.info(f"[{self.name}] 최종 진단 프로세스 완료 (소요시간: {duration:.2f}초)")
             yield event

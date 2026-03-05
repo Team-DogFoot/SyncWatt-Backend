@@ -38,17 +38,8 @@ class OcrRefinerAgent(LlmAgent):
         raw_text = ctx.session.state.get("raw_text", "")
         logger.info(f"[{self.name}] OCR 데이터 정제 시작 (입력 텍스트 길이: {len(raw_text)})")
         
-        # 입력 텍스트 로그 출력 (디버깅용)
-        logger.debug(f"[{self.name}] Raw text for refining: {raw_text[:500]}...")
-        
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 데이터 정제 완료 (소요시간: {duration:.2f}초)")
-                
-                refined_data = ctx.session.state.get("settlement_data")
-                if refined_data:
-                    logger.info(f"[{self.name}] 정제된 데이터: {refined_data.model_dump()}")
-                else:
-                    logger.error(f"[{self.name}] 데이터 정제 실패: 결과가 None입니다.")
+                logger.info(f"[{self.name}] 데이터 정제 프로세스 완료 (소요시간: {duration:.2f}초)")
             yield event
