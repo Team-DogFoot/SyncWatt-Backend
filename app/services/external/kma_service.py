@@ -1,6 +1,9 @@
 import httpx
+import logging
 from app.core.config import settings
 from app.schemas.external import KMAMonthlyIrradianceResponse
+
+logger = logging.getLogger(__name__)
 
 class KMAService:
     DEFAULT_IRRADIANCE = 15.5 # Mock MJ/m² (Proxy avg)

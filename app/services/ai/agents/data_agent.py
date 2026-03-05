@@ -55,18 +55,30 @@ class DataFetcherAgent(BaseAgent):
             stn_id = "108" # Default (Seoul)
             if address:
                 # 주요 도별 대표 관측소 매핑
-                if any(x in address for x in ["전남", "전라남도", "목포", "무안"]): stn_id = "165" # 목포
-                elif any(x in address for x in ["전북", "전라북도", "전주"]): stn_id = "146" # 전주
-                elif any(x in address for x in ["충남", "충청남도", "홍성", "천안"]): stn_id = "129" # 서산(충남 인근)
-                elif any(x in address for x in ["충북", "충청북도", "청주"]): stn_id = "131" # 청주
-                elif any(x in address for x in ["경남", "경상남도", "창원", "진주"]): stn_id = "155" # 창원
-                elif any(x in address for x in ["경북", "경상북도", "안동", "포항"]): stn_id = "138" # 포항
-                elif any(x in address for x in ["부산"]): stn_id = "159"
-                elif any(x in address for x in ["대구"]): stn_id = "143"
-                elif any(x in address for x in ["광주"]): stn_id = "156"
-                elif any(x in address for x in ["대전"]): stn_id = "133"
-                elif any(x in address for x in ["울산"]): stn_id = "152"
-                elif any(x in address for x in ["제주"]): stn_id = "184"
+                if any(x in address for x in ["전남", "전라남도", "목포", "무안"]):
+                    stn_id = "165" # 목포
+                elif any(x in address for x in ["전북", "전라북도", "전주"]):
+                    stn_id = "146" # 전주
+                elif any(x in address for x in ["충남", "충청남도", "홍성", "천안"]):
+                    stn_id = "129" # 서산(충남 인근)
+                elif any(x in address for x in ["충북", "충청북도", "청주"]):
+                    stn_id = "131" # 청주
+                elif any(x in address for x in ["경남", "경상남도", "창원", "진주"]):
+                    stn_id = "155" # 창원
+                elif any(x in address for x in ["경북", "경상북도", "안동", "포항"]):
+                    stn_id = "138" # 포항
+                elif any(x in address for x in ["부산"]):
+                    stn_id = "159"
+                elif any(x in address for x in ["대구"]):
+                    stn_id = "143"
+                elif any(x in address for x in ["광주"]):
+                    stn_id = "156"
+                elif any(x in address for x in ["대전"]):
+                    stn_id = "133"
+                elif any(x in address for x in ["울산"]):
+                    stn_id = "152"
+                elif any(x in address for x in ["제주"]):
+                    stn_id = "184"
                 
                 logger.info(f"[{self.name}] Address found: {address}. Using stn_id: {stn_id}")
             else:
