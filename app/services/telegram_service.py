@@ -3,7 +3,8 @@ import logging
 from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
-from google.adk.sessions.session import Session
+from google.adk.runners import InMemoryRunner
+from google.genai import types
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +12,9 @@ class TelegramService:
     def __init__(self):
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.base_url = f"{settings.TELEGRAM_API_URL}{self.bot_token}"
+        # We use a Runner to manage the session and invocation
+        self.runner = InMemoryRunner(agent=pipeline)
+        self.runner.auto_create_session = True
 
     async def get_file_path(self, file_id: str) -> str:
         """getFile API를 통해 파일의 상대 경로 획득"""
@@ -79,26 +83,45 @@ class TelegramService:
             # await self.send_photo_echo(chat_id, image_bytes)
             
             # 4. ADK 파이프라인 실행
-            session = Session(state={"image_bytes": image_bytes})
-            
-            # pipeline.run_async yields events, we consume them to finish the run
-            async for event in pipeline.run_async(session=session):
+            user_id = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
+            session_id = f"tg_{chat_id}_{update.message.message_id}"
+
+            # runner.run_async yields events, we consume them to finish the run
+            async for event in self.runner.run_async(
+                user_id=user_id,
+                session_id=session_id,
+                state_delta={"image_bytes": image_bytes},
+                new_message=types.UserContent(parts=[types.Part(text="Analyze image")])
+            ):
                 logger.debug(f"ADK Event: {event.author} - {event.content}")
 
             # 결과 추출 (analysis_result는 SequentialAgent의 마지막 결과로 세션에 저장됨)
+            session = await self.runner.session_service.get_session(
+                app_name=self.runner.app_name,
+                user_id=user_id,
+                session_id=session_id
+            )
+            
             analysis = session.state.get("analysis_result")
             if analysis:
+                # analysis could be a dict or a pydantic model depending on implementation
+                if isinstance(analysis, dict):
+                    summary = analysis.get("summary")
+                    lang = analysis.get("detected_language")
+                else:
+                    summary = getattr(analysis, "summary", "N/A")
+                    lang = getattr(analysis, "detected_language", "N/A")
+
                 response_text = (
-                    f"📝 요약: {analysis.summary}\n\n"
-                    f"🌐 언어: {analysis.detected_language}\n\n"
-                    f"📊 추출 데이터: {analysis.extracted_data}"
+                    f"📝 요약: {summary}\n\n"
+                    f"🌐 언어: {lang}"
                 )
                 await self.send_text_message(chat_id, response_text)
             else:
                 await self.send_text_message(chat_id, "이미지 분석 결과를 가져오지 못했습니다.")
             
         except Exception as e:
-            logger.error(f"Telegram image processing error: {e}")
+            logger.error(f"Telegram image processing error: {e}", exc_info=True)
             await self.send_text_message(chat_id, f"처리 중 오류가 발생했습니다: {str(e)}")
 
 telegram_service = TelegramService()
