@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any
+from typing import Any
 from app.services.ai.agents.ocr_agent import OcrRefinerAgent
 from app.services.ai.agents.data_agent import DataFetcherAgent
 from app.services.ai.agents.diagnosis_agent import DiagnosisAgent, DiagnosisCalculatorAgent
@@ -13,7 +13,7 @@ class AgentFactory:
     Google ADK 패턴에 따라 에이전트를 관리하는 팩토리 클래스입니다.
     싱글톤 패턴을 적용하여 에이전트 인스턴스를 캐싱하고 재사용합니다.
     """
-    _instances: Dict[str, Any] = {}
+    _instances: dict[str, Any] = {}
 
     @classmethod
     def _get_cached_instance(cls, agent_class):

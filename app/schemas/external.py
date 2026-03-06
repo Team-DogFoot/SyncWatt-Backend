@@ -1,13 +1,12 @@
 from pydantic import BaseModel
-from typing import Optional
 
 class KMAMonthlyIrradianceResponse(BaseModel):
     year: int
     month: int
     avg_irradiance: float  # W/m² or MJ/m² depending on unit
     unit: str = "MJ/m²"
-    stn_id: Optional[str] = None
-    stn_name: Optional[str] = None
+    stn_id: str | None = None
+    stn_name: str | None = None
 
 class KPXMonthlyPriceResponse(BaseModel):
     year: int

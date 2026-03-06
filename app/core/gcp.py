@@ -2,11 +2,10 @@ import logging
 import json
 from google.cloud import vision
 from google.oauth2 import service_account
-from typing import Optional
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
-_vision_client: Optional[vision.ImageAnnotatorClient] = None
+_vision_client: vision.ImageAnnotatorClient | None = None
 
 def get_vision_client() -> vision.ImageAnnotatorClient:
     """Returns a singleton Google Cloud Vision client with support for JSON SA Key string."""
