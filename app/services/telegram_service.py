@@ -169,11 +169,25 @@ class TelegramService:
                 logger.info(f"[Telegram] Analysis result sent (session: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
-                # 상세 보고서 버튼 (누르면 사전예약 안내로 이어짐)
+                # CTA: 안내 텍스트 + 버튼을 한 메시지로
                 await self.client.send_inline_keyboard(
                     chat_id,
-                    "더 자세한 분석이 궁금하시다면:",
-                    [[{"text": "📊 상세 보고서 보기", "callback_data": "show_report_detail"}]],
+                    "📈 *최적 입찰가 추천*\n\n"
+                    "매일 아침 받아보는 내용:\n"
+                    "• SMP 시세 기반 최적 입찰가\n"
+                    "• 일조량 예보 연동 발전량 예측\n"
+                    "• 한전 vs KPX 유불리 알림",
+                    [[{"text": "📈 최적 입찰가 받기", "callback_data": "subscribe_bidding"}]],
+                )
+                await self.client.send_inline_keyboard(
+                    chat_id,
+                    "📊 *월간 발전소 성적표*\n\n"
+                    "매월 자동으로 받아보는 내용:\n"
+                    "• 월별 발전량/수익 트렌드\n"
+                    "• 연간 누적 기회비용 분석\n"
+                    "• 지역 일조량 기반 정밀 분석\n"
+                    "• 원청 제출용 PDF 리포트",
+                    [[{"text": "📊 월간 성적표 받기", "callback_data": "subscribe_report"}]],
                 )
             else:
                 logger.warning(f"[Telegram] Analysis result missing (session: {session_id})")
@@ -201,47 +215,35 @@ class TelegramService:
         logger.info(f"[Telegram] Callback query: chat_id={chat_id}, data={data}")
 
         try:
-            # Telegram callback 응답 (로딩 표시 제거)
             await self.client.answer_callback_query(cb_id)
 
-            if data == "show_report_detail":
-                await self.client.send_inline_keyboard(
-                    chat_id,
-                    "📊 *상세 리포트는 4월에 오픈 예정이에요.*\n오픈 시 알림을 받아보시겠어요?",
-                    [[
-                        {"text": "알림 받기 ✅", "callback_data": "preregister_yes"},
-                        {"text": "괜찮아요", "callback_data": "preregister_no"},
-                    ]],
-                )
-            elif data == "preregister_yes":
-                self._save_pre_registration(chat_id)
+            if data in ("subscribe_bidding", "subscribe_report"):
+                interest = "bidding" if data == "subscribe_bidding" else "report"
+                self._save_pre_registration(chat_id, interest=interest)
                 await self.client.send_message(
                     chat_id,
-                    "✅ 등록 완료! 상세 리포트가 오픈되면 가장 먼저 알려드릴게요."
-                )
-            elif data == "preregister_no":
-                await self.client.send_message(
-                    chat_id,
-                    "알겠어요. 나중에 언제든 문의해 주세요!"
+                    "📅 *4월 중 오픈 예정*이에요.\n"
+                    "오픈되면 가장 먼저 알려드릴게요! ✅",
                 )
         except Exception as e:
             logger.error(f"[Telegram] Callback processing failed: {str(e)}", exc_info=True)
 
-    def _save_pre_registration(self, chat_id: int):
+    def _save_pre_registration(self, chat_id: int, interest: str = "general"):
         """사전예약 정보를 DB에 저장합니다."""
         from app.models.pre_registration import PreRegistration
         try:
             with Session(engine) as session:
                 existing = session.query(PreRegistration).filter(
-                    PreRegistration.telegram_chat_id == str(chat_id)
+                    PreRegistration.telegram_chat_id == str(chat_id),
+                    PreRegistration.interest == interest,
                 ).first()
                 if existing:
-                    logger.info(f"[DB] PreRegistration already exists for chat_id: {chat_id}")
+                    logger.info(f"[DB] PreRegistration already exists: chat_id={chat_id}, interest={interest}")
                     return
-                reg = PreRegistration(telegram_chat_id=str(chat_id))
+                reg = PreRegistration(telegram_chat_id=str(chat_id), interest=interest)
                 session.add(reg)
                 session.commit()
-                logger.info(f"[DB] PreRegistration saved for chat_id: {chat_id}")
+                logger.info(f"[DB] PreRegistration saved: chat_id={chat_id}, interest={interest}")
         except Exception as e:
             logger.error(f"[DB] PreRegistration save failed: {str(e)}")
 
