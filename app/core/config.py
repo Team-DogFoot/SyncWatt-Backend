@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     POSTGRES_DB: str | None = "syncwatt"
 
     # External Data API Keys
-    KMA_API_KEY: str | None = None
     KPX_API_KEY: str | None = None
 
     # AWS S3 (이미지 저장)

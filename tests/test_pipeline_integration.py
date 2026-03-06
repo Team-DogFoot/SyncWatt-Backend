@@ -61,30 +61,30 @@ def mock_smp():
 
 
 @pytest.fixture
-def mock_kma():
-    """KMA API 의존성을 mock하여 테스트용 일조량 값을 반환합니다."""
-    from app.schemas.external import KMAMonthlyIrradianceResponse
+def mock_weather():
+    """NASA POWER 의존성을 mock하여 테스트용 일사량 값을 반환합니다."""
+    from app.schemas.external import IrradianceData
 
-    async def fake_irradiance(year, month, stn_id="108"):
+    async def fake_irradiance(year, month, latitude, longitude):
         irr_map = {
-            (2019, 12): 9.8,
-            (2018, 12): 11.2,
+            (2019, 12): 1.99,
+            (2018, 12): 2.50,
         }
-        avg = irr_map.get((year, month), 15.5)
-        return KMAMonthlyIrradianceResponse(
+        avg = irr_map.get((year, month), 3.5)
+        return IrradianceData(
             year=year, month=month, avg_irradiance=avg,
-            unit="MJ/m²", stn_id=stn_id, stn_name="TEST"
+            latitude=latitude, longitude=longitude, source="mock",
         )
 
     with patch(
-        "app.services.external.kma_service.kma_service.get_monthly_avg_irradiance",
+        "app.services.external.weather.weather_service.get_monthly_irradiance",
         side_effect=fake_irradiance,
     ):
         yield
 
 
 @pytest.mark.asyncio
-async def test_full_pipeline_with_sample_image(image_bytes, mock_smp, mock_kma):
+async def test_full_pipeline_with_sample_image(image_bytes, mock_smp, mock_weather):
     """
     실제 정산서 이미지 → ParallelAgent(OCR+Vision) → CodeVerifier → DataFetcher → Diagnosis
     전체 파이프라인을 실행하고 최종 analysis_result를 검증합니다.
@@ -167,9 +167,12 @@ async def test_full_pipeline_with_sample_image(image_bytes, mock_smp, mock_kma):
     assert market_data is not None, "market_data가 None입니다."
     assert market_data.get("curr_smp") == 110.38
     assert market_data.get("prev_smp") == 115.50
-    # KMA mock 값 확인 (두 값이 서로 달라야 함)
-    assert market_data.get("curr_irr") != market_data.get("prev_year_irr"), (
-        "curr_irr과 prev_year_irr이 같습니다. KMA 데이터가 default fallback으로 빠진 것 같습니다."
+    # NASA POWER mock 값 확인
+    assert market_data.get("curr_irr") == 1.99, (
+        f"curr_irr 불일치: {market_data.get('curr_irr')} != 1.99"
+    )
+    assert market_data.get("prev_year_irr") == 2.50, (
+        f"prev_year_irr 불일치: {market_data.get('prev_year_irr')} != 2.50"
     )
     logger.info(
         f"[검증] market_data 통과: SMP({market_data['curr_smp']} vs {market_data['prev_smp']}), "
