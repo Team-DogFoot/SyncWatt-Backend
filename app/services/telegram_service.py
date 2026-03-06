@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import logging
 import time
@@ -108,7 +109,7 @@ class TelegramService:
             logger.info(f"[Telegram] Image download complete (size: {len(image_bytes)} bytes)")
 
             # 2-1. S3에 원본 이미지 백그라운드 저장
-            self._save_image_to_s3(image_bytes, chat_id, session_id)
+            asyncio.create_task(self._save_image_to_s3(image_bytes, chat_id, session_id))
 
             # 3. ADK 파이프라인 실행 (세션 state 초기화 포함)
             logger.info("[Pipeline] Analysis pipeline starting")
@@ -235,14 +236,12 @@ class TelegramService:
             logger.error(f"[DB] PreRegistration save failed: {str(e)}")
 
     @staticmethod
-    def _save_image_to_s3(image_bytes: bytes, chat_id: int, session_id: str):
-        """이미지를 S3에 백그라운드로 저장합니다. 실패해도 분석에 영향 없음."""
-        import threading
+    async def _save_image_to_s3(image_bytes: bytes, chat_id: int, session_id: str):
+        """Save image to S3 in background. Failure does not affect analysis."""
         from app.services.external.s3_service import upload_image_to_s3
-        threading.Thread(
-            target=upload_image_to_s3,
-            args=(image_bytes, chat_id, session_id),
-            daemon=True,
-        ).start()
+        try:
+            await asyncio.to_thread(upload_image_to_s3, image_bytes, chat_id, session_id)
+        except Exception as e:
+            logger.error(f"[S3] Background upload failed: {e}")
 
 telegram_service = TelegramService()
