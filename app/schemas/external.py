@@ -1,12 +1,15 @@
 from pydantic import BaseModel
 
-class KMAMonthlyIrradianceResponse(BaseModel):
+
+class IrradianceData(BaseModel):
+    """일사량 데이터 (Provider 공통)"""
     year: int
     month: int
-    avg_irradiance: float  # W/m² or MJ/m² depending on unit
-    unit: str = "MJ/m²"
-    stn_id: str | None = None
-    stn_name: str | None = None
+    avg_irradiance: float  # kWh/m²/day (일평균)
+    latitude: float
+    longitude: float
+    source: str  # "nasa_power", "solcast", "kma" 등
+
 
 class KPXMonthlyPriceResponse(BaseModel):
     year: int
