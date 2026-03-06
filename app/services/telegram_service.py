@@ -1,5 +1,4 @@
 import httpx
-import json
 import logging
 import time
 from collections import defaultdict
@@ -8,6 +7,7 @@ from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
 from app.schemas.ai.diagnosis import DiagnosisResult
+from app.services.telegram_client import TelegramClient
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 from sqlmodel import Session
@@ -24,8 +24,7 @@ class TelegramService:
     텔레그램 봇의 메시지 수신 및 응답을 처리하는 서비스 클래스입니다.
     """
     def __init__(self):
-        self.bot_token = settings.TELEGRAM_BOT_TOKEN
-        self.base_url = f"{settings.TELEGRAM_API_URL}{self.bot_token}"
+        self.client = TelegramClient()
         # ADK 실행을 위한 Runner 초기화
         self.runner = InMemoryRunner(agent=pipeline)
         self.runner.auto_create_session = True
@@ -52,52 +51,6 @@ class TelegramService:
         usage["count"] += 1
         remaining = DAILY_ANALYSIS_LIMIT - usage["count"]
         logger.info(f"[RateLimit] chat_id={chat_id}: {usage['count']}/{DAILY_ANALYSIS_LIMIT} (남은 횟수: {remaining})")
-
-    async def send_text_message(self, chat_id: int, text: str) -> int | None:
-        """사용자에게 텍스트 메시지를 전송하고 message_id를 반환합니다."""
-        try:
-            async with httpx.AsyncClient() as client:
-                data = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
-                response = await client.post(f"{self.base_url}/sendMessage", data=data)
-                response.raise_for_status()
-                msg_id = response.json().get("result", {}).get("message_id")
-                logger.debug(f"[Telegram] 메시지 전송 완료 (chat_id: {chat_id}, message_id: {msg_id})")
-                return msg_id
-        except Exception as e:
-            logger.error(f"[Telegram] 메시지 전송 실패: {str(e)}")
-            return None
-
-    async def delete_message(self, chat_id: int, message_id: int):
-        """텔레그램 메시지를 삭제합니다."""
-        try:
-            async with httpx.AsyncClient() as client:
-                data = {'chat_id': chat_id, 'message_id': message_id}
-                response = await client.post(f"{self.base_url}/deleteMessage", data=data)
-                response.raise_for_status()
-                logger.debug(f"[Telegram] 메시지 삭제 완료 (chat_id: {chat_id}, message_id: {message_id})")
-        except Exception as e:
-            logger.debug(f"[Telegram] 메시지 삭제 실패 (무시): {str(e)}")
-
-    async def send_message_with_inline_keyboard(
-        self, chat_id: int, text: str, buttons: list[list[dict]]
-    ) -> int | None:
-        """InlineKeyboardMarkup이 포함된 메시지를 전송합니다."""
-        try:
-            async with httpx.AsyncClient() as client:
-                data = {
-                    'chat_id': chat_id,
-                    'text': text,
-                    'parse_mode': 'Markdown',
-                    'reply_markup': json.dumps({"inline_keyboard": buttons}),
-                }
-                response = await client.post(f"{self.base_url}/sendMessage", data=data)
-                response.raise_for_status()
-                msg_id = response.json().get("result", {}).get("message_id")
-                logger.debug(f"[Telegram] 인라인 키보드 메시지 전송 완료 (chat_id: {chat_id})")
-                return msg_id
-        except Exception as e:
-            logger.error(f"[Telegram] 인라인 키보드 메시지 전송 실패: {str(e)}")
-            return None
 
     def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data, market_data: dict):
         """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
@@ -239,7 +192,7 @@ class TelegramService:
         chat_id = update.message.chat.id
         logger.info(f"[Telegram] 텍스트 수신 (chat_id: {chat_id}): {update.message.text[:50]}")
 
-        await self.send_text_message(
+        await self.client.send_message(
             chat_id,
             "📸 정산서 이미지를 보내주세요!\n사진으로 찍어서 보내주시면 AI가 자동으로 분석해드려요.",
         )
@@ -255,7 +208,7 @@ class TelegramService:
         # 레이트 리밋 체크
         if not self._check_rate_limit(chat_id):
             logger.info(f"[RateLimit] chat_id={chat_id}: 일일 한도 초과")
-            await self.send_text_message(
+            await self.client.send_message(
                 chat_id,
                 "📊 오늘 무료 분석 3회를 모두 사용했어요.\n\n"
                 "더 자세한 분석과 무제한 이용은 SyncWatt에서!\n"
@@ -273,20 +226,10 @@ class TelegramService:
 
         try:
             # 1. 초기 접수 알림 (분석 완료 후 삭제)
-            loading_msg_id = await self.send_text_message(chat_id, "🔍 정산서 이미지를 확인했습니다. 분석을 시작합니다... (약 10~15초 소요)")
+            loading_msg_id = await self.client.send_message(chat_id, "🔍 정산서 이미지를 확인했습니다. 분석을 시작합니다... (약 10~15초 소요)")
 
             # 2. 이미지 다운로드
-            async with httpx.AsyncClient() as client:
-                # 파일 경로 획득
-                path_resp = await client.get(f"{self.base_url}/getFile", params={"file_id": file_id})
-                path_resp.raise_for_status()
-                file_path = path_resp.json()["result"]["file_path"]
-                
-                # 실제 이미지 데이터 다운로드
-                download_url = f"https://api.telegram.org/file/bot{self.bot_token}/{file_path}"
-                img_resp = await client.get(download_url)
-                img_resp.raise_for_status()
-                image_bytes = img_resp.content
+            image_bytes = await self.client.download_file(file_id)
             
             logger.info(f"[Telegram] 이미지 다운로드 완료 (크기: {len(image_bytes)} bytes)")
 
@@ -325,7 +268,7 @@ class TelegramService:
             
             # 초기 알림 삭제
             if loading_msg_id:
-                await self.delete_message(chat_id, loading_msg_id)
+                await self.client.delete_message(chat_id, loading_msg_id)
 
             if analysis_data:
                 # 결과 데이터 파싱 (Pydantic 모델 검증)
@@ -342,13 +285,13 @@ class TelegramService:
 
                 response_text = self._build_response_message(analysis)
 
-                await self.send_text_message(chat_id, response_text)
+                await self.client.send_message(chat_id, response_text)
                 self._increment_usage(chat_id)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
                 # 상세 리포트 사전예약 버튼
-                await self.send_message_with_inline_keyboard(
+                await self.client.send_inline_keyboard(
                     chat_id,
                     "📊 *상세 리포트는 4월에 오픈 예정이에요.*\n오픈 시 알림을 받아보시겠어요?",
                     [[
@@ -358,14 +301,14 @@ class TelegramService:
                 )
             else:
                 logger.warning(f"[Telegram] 분석 결과 누락 (세션: {session_id})")
-                await self.send_text_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
+                await self.client.send_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
 
         except httpx.HTTPStatusError as e:
             logger.error(f"[Telegram] API 통신 에러: {str(e)}")
-            await self.send_text_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
+            await self.client.send_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
         except Exception as e:
             logger.error(f"[Telegram] 치명적 에러 발생: {str(e)}", exc_info=True)
-            await self.send_text_message(chat_id, "⚠️ 분석 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+            await self.client.send_message(chat_id, "⚠️ 분석 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
         finally:
             duration = time.perf_counter() - start_time
             logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
@@ -383,20 +326,16 @@ class TelegramService:
 
         try:
             # Telegram callback 응답 (로딩 표시 제거)
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{self.base_url}/answerCallbackQuery",
-                    data={"callback_query_id": cb_id},
-                )
+            await self.client.answer_callback_query(cb_id)
 
             if data == "preregister_yes":
                 self._save_pre_registration(chat_id)
-                await self.send_text_message(
+                await self.client.send_message(
                     chat_id,
                     "✅ 등록 완료! 상세 리포트가 오픈되면 가장 먼저 알려드릴게요."
                 )
             elif data == "preregister_no":
-                await self.send_text_message(
+                await self.client.send_message(
                     chat_id,
                     "알겠어요. 나중에 언제든 문의해 주세요!"
                 )
