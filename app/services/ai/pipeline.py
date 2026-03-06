@@ -54,4 +54,3 @@ def create_mvp_analysis_pipeline() -> SequentialAgent:
 
 # 서비스 전역에서 사용할 파이프라인 인스턴스
 pipeline = create_mvp_analysis_pipeline()
-analysis_pipeline = pipeline
