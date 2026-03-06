@@ -1,3 +1,4 @@
+import calendar
 import httpx
 import logging
 from app.core.config import settings
@@ -33,8 +34,8 @@ class KMAService:
 
         # Real API implementation (Simplified for now)
         start_dt = f"{year}{month:02d}01"
-        # For simplicity, we assume month ends at 28th to 31st. Just a rough range for monthly avg.
-        end_dt = f"{year}{month:02d}28" 
+        last_day = calendar.monthrange(year, month)[1]
+        end_dt = f"{year}{month:02d}{last_day}"
         
         params = {
             "serviceKey": self.api_key,

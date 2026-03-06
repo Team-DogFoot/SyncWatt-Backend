@@ -36,17 +36,25 @@ class TelegramService:
         except Exception as e:
             logger.error(f"[Telegram] 메시지 전송 실패: {str(e)}")
 
-    def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data: dict, market_data: dict):
+    def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data, market_data: dict):
         """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
         try:
+            # settlement_data가 Pydantic 객체일 수 있으므로 속성 접근 사용
+            if hasattr(settlement_data, "generation_kwh"):
+                gen_kwh = settlement_data.generation_kwh
+            elif isinstance(settlement_data, dict):
+                gen_kwh = settlement_data.get("generation_kwh", 0)
+            else:
+                gen_kwh = 0
+
             with Session(engine) as session:
                 new_settlement = MonthlySettlement(
                     telegram_chat_id=str(chat_id),
                     year_month=analysis.year_month,
-                    actual_generation_kwh=settlement_data.get("generation_kwh", 0),
+                    actual_generation_kwh=gen_kwh,
                     actual_revenue_krw=analysis.actual_revenue_krw,
-                    smp_avg=market_data.get("curr_smp"),
-                    irradiance_avg=market_data.get("curr_irr"),
+                    smp_avg=market_data.get("curr_smp") if isinstance(market_data, dict) else None,
+                    irradiance_avg=market_data.get("curr_irr") if isinstance(market_data, dict) else None,
                     optimal_revenue_krw=analysis.optimal_revenue_krw,
                     opportunity_cost_krw=analysis.opportunity_loss_krw,
                     loss_reason=analysis.loss_cause.value,
@@ -92,12 +100,21 @@ class TelegramService:
             
             logger.info(f"[Telegram] 이미지 다운로드 완료 (크기: {len(image_bytes)} bytes)")
 
-            # 3. ADK 파이프라인 실행
+            # 3. ADK 파이프라인 실행 (세션 state 초기화 포함)
             logger.info("[Pipeline] 분석 파이프라인 가동 시작")
+            initial_state = {
+                "image_bytes": image_bytes,
+                "raw_text": None,
+                "settlement_data": None,
+                "visual_data": None,
+                "market_data": None,
+                "diagnosis_calc": None,
+                "analysis_result": None,
+            }
             async for event in self.runner.run_async(
                 user_id=user_id_str,
                 session_id=session_id,
-                state_delta={"image_bytes": image_bytes},
+                state_delta=initial_state,
                 new_message=types.UserContent(parts=[types.Part(text="정산서 분석 시작")])
             ):
                 logger.debug(f"[Pipeline Event] {event.author}: {event.content}")
@@ -115,51 +132,47 @@ class TelegramService:
             
             if analysis_data:
                 # 결과 데이터 파싱 (Pydantic 모델 검증)
-                analysis = DiagnosisResult.model_validate(analysis_data)
-                
+                if isinstance(analysis_data, DiagnosisResult):
+                    analysis = analysis_data
+                else:
+                    analysis = DiagnosisResult.model_validate(analysis_data)
+
                 # 금액 천단위 콤마 처리
-                loss_formatted = format(abs(int(analysis.opportunity_loss_krw)), ",")
+                loss_val = int(analysis.opportunity_loss_krw)
+                loss_formatted = format(abs(loss_val), ",")
                 optimal_formatted = format(int(analysis.optimal_revenue_krw), ",")
                 actual_formatted = format(int(analysis.actual_revenue_krw), ",")
-                recovery_formatted = format(int(analysis.opportunity_loss_krw * 0.4) if analysis.opportunity_loss_krw > 0 else 0, ",")
-                
+                recovery = int(analysis.potential_recovery_krw) if analysis.potential_recovery_krw else 0
+                recovery_formatted = format(recovery, ",")
+
                 logger.info(f"[Telegram] [Final Outputs]: Loss={loss_formatted}, Optimal={optimal_formatted}, Actual={actual_formatted}, Potential={recovery_formatted}")
-                
+
                 # DB 저장 (예외 격리)
                 try:
                     self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
                 except Exception as e:
                     logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
 
-                # PRD 규격에 맞춘 최종 응답 구성
-                if analysis.opportunity_loss_krw > 0:
-                    response_text = (
-                        f"📝 *지난달 KPX 전환 시 수익 분석*\n\n"
-                        f"만약 시장가(KPX)로 정산받으셨다면,\n"
-                        f"현재보다 약 *{loss_formatted}원* 더 받으실 수 있었어요.\n\n"
-                        f"📊 분석 근거\n"
-                        f"• KPX 기대수익: {optimal_formatted}원\n"
-                        f"• 실제 수령액: {actual_formatted}원\n\n"
-                        f"💡 *주요 원인*\n"
-                        f"{analysis.one_line_message}\n\n"
-                        f"📈 이 중 약 *{recovery_formatted}원*은 입찰 예측값 최적화로 추가 확보가 가능합니다.\n"
-                        f"지금 가입하고 내일 아침부터 입찰 추천값을 받아보세요!"
+                # 최종 응답 구성 (판단 없이 숫자만 제공)
+                response_text = (
+                    f"📝 *지난달 손실 진단 결과*\n\n"
+                    f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n"
+                    f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
+                    f"💡 *주요 원인*\n"
+                    f"{analysis.one_line_message}"
+                )
+
+                if loss_val > 0 and recovery > 0:
+                    response_text += (
+                        f"\n\n📈 이 중 약 {recovery_formatted}원은 입찰 예측값 최적화로 회수 가능해요.\n"
+                        f"가입 후 매일 아침 입찰 추천값을 받아보세요."
                     )
-                else:
-                    response_text = (
-                        f"📝 *지난달 수익 진단 결과*\n\n"
-                        f"소장님은 현재 정산 방식이 시장가(KPX)보다 유리한 상태입니다.\n\n"
-                        f"📊 수치 확인\n"
-                        f"• 실제 수령액: {actual_formatted}원\n"
-                        f"• KPX 기대수익: {optimal_formatted}원\n\n"
-                        f"💡 현재 계약 방식을 유지하는 것이 경제적입니다."
-                    )
-                
+
                 if not analysis.address_used:
                     response_text += "\n\n📍 발전소 위치 정보가 없어서 전국 평균 일조량으로 추산했어요. 가입 후 위치를 등록하면 더 정확한 분석이 가능해요."
-                
+
                 response_text += "\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
-                
+
                 await self.send_text_message(chat_id, response_text)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")

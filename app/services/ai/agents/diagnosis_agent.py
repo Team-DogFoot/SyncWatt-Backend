@@ -1,105 +1,178 @@
 import logging
 import time
-from google.adk.agents import LlmAgent
+from google.adk.agents import LlmAgent, BaseAgent
 from app.schemas.ai.diagnosis import DiagnosisResult, LossCause
 from app.core.config import settings
 from app.services.ai.utils import create_text_event
+from app.services.ai.diagnosis_service import calculate_and_diagnose
 
 logger = logging.getLogger(__name__)
 
+
+class DiagnosisCalculatorAgent(BaseAgent):
+    """
+    순수 Python 로직으로 진단 계산을 수행하고 결과를 세션에 저장하는 에이전트입니다.
+    """
+    def __init__(self):
+        super().__init__(
+            name="diagnosis_calculator",
+            description="Python 로직으로 손실 진단 계산을 수행합니다."
+        )
+
+    async def _run_async_impl(self, ctx):
+        start_t = time.perf_counter()
+        logger.info(f"[{self.name}] 진단 계산 시작")
+
+        settlement_data = ctx.session.state.get("settlement_data")
+        market_data = ctx.session.state.get("market_data")
+
+        if not settlement_data:
+            logger.error(f"[{self.name}] settlement_data 누락")
+            yield create_text_event(self.name, "정산 데이터가 없어 진단 불가.")
+            return
+
+        if not market_data or market_data.get("error_smp") or market_data.get("curr_smp") is None:
+            logger.warning(f"[{self.name}] 필수 시장 데이터 누락 (error_smp={market_data.get('error_smp') if market_data else 'N/A'})")
+            error_result = DiagnosisResult(
+                year_month=settlement_data.year_month,
+                actual_revenue_krw=settlement_data.total_revenue_krw,
+                optimal_revenue_krw=0,
+                opportunity_loss_krw=0,
+                potential_recovery_krw=0,
+                loss_cause=LossCause.UNKNOWN,
+                one_line_message="시장 가격(SMP) 데이터가 부족하여 진단을 수행할 수 없습니다.",
+                address_used=bool(settlement_data.address),
+            )
+            yield create_text_event(
+                self.name,
+                "데이터 부족으로 인한 진단 실패",
+                state_delta={"analysis_result": error_result},
+            )
+            return
+
+        calc = calculate_and_diagnose(settlement_data, market_data)
+
+        # 세션에 계산 결과 저장 (DiagnosisAgent가 참조)
+        ctx.session.state["diagnosis_calc"] = calc
+
+        duration = time.perf_counter() - start_t
+        logger.info(f"[{self.name}] 진단 계산 완료 (소요시간: {duration:.2f}초)")
+
+        yield create_text_event(
+            self.name,
+            f"진단 계산 완료: cause={calc['cause']}, loss={calc['loss']}",
+            state_delta={"diagnosis_calc": calc},
+        )
+
+
 class DiagnosisAgent(LlmAgent):
     """
-    정산 데이터와 외부 시장 데이터를 분석하여 최종적인 기회 손실액과 원인을 진단하는 에이전트입니다.
+    진단 계산 결과를 바탕으로 소장님용 한 줄 메시지만 생성하는 에이전트입니다.
     """
     def __init__(self):
         super().__init__(
             name="diagnoser",
             model=settings.GEMINI_MODEL,
             instruction="""
-            입력받은 정산 데이터 {settlement_data_json}와 외부 시장 데이터 {market_data_json}를 분석하여 수익 손실 진단을 수행하세요.
+            아래 진단 결과를 바탕으로 소장님께 전달할 친근한 한 줄 메시지를 생성하세요.
 
-            지침:
-            - 수익 분석 관점: 이 진단은 "만약 KPX(전력거래소) 시장가로 정산받았다면?"을 가정하여 소장님의 기회 수익을 분석하는 것입니다.
-            - 실제 수령액: {actual_revenue_krw}원
-            - 최적 수익: {optimal_revenue_krw}원
-            - 손실액: {opportunity_loss_krw}원
-            - 손실액이 양수(+)면 "KPX로 전환 시 얻을 수 있었던 기회 수익"으로, 음수(-)면 "현재 한전 계약이 시장가보다 유리함"으로 해석합니다.
+            입력:
+            - 원인 코드: {cause} (WEATHER / SMP / COMPLEX / UNKNOWN 중 하나)
+            - 일조량 변화율: {irr_diff_pct}%
+            - SMP 변화율: {smp_diff_pct}%
 
-            분류 기준 (우선순위):
-            1. 일조량 원인: curr_irr이 prev_year_irr 대비 10% 이상 낮으면 -> WEATHER
-               메시지: "주요 원인은 [월]월 일조량이 평균보다 [N]% 낮았기 때문이에요."
-            2. SMP 원인: curr_smp가 prev_smp 대비 10% 이상 낮으면 -> SMP
-               메시지: "주요 원인은 SMP 시장가가 전달 대비 [N]% 하락했기 때문이에요."
-            3. 복합 원인: 일조량과 SMP 둘 다 5% 이상 낮으면 -> COMPLEX
-               메시지: "일조량 감소([N]%)와 SMP 하락([N]%)이 복합적으로 영향을 줬어요."
-            4. 원인 불명 -> UNKNOWN
-               메시지: "현재 소장님의 정산 방식은 시장가 변동과 무관한 고정 단가 방식일 수 있습니다."
+            원인별 메시지 형식:
+            - WEATHER: "주요 원인은 이번달 일조량이 평균보다 {irr_diff_pct의 절댓값}% 낮았기 때문이에요."
+            - SMP: "주요 원인은 SMP 시장가가 전달 대비 {smp_diff_pct의 절댓값}% 하락했기 때문이에요."
+            - COMPLEX: "일조량 감소({irr_diff_pct의 절댓값}%)와 SMP 하락({smp_diff_pct의 절댓값}%)이 복합적으로 영향을 줬어요."
+            - UNKNOWN: "이번달은 특이한 손실 원인이 없어요. 예측 오차를 점검해보세요."
 
-            모든 출력은 DiagnosisResult 스키마 형식을 엄격히 준수해야 하며, JSON 형식으로만 응답하세요. 다른 부가 설명은 생략하세요.
+            출력: one_line_message 필드만 포함한 JSON
+            예: {"one_line_message": "주요 원인은 ..."}
             """,
-            output_schema=DiagnosisResult,
-            output_key="analysis_result"
+            output_key="diagnosis_message",
         )
         logger.info(f"[{self.name}] 에이전트가 초기화되었습니다.")
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        settlement_data = ctx.session.state.get("settlement_data")
-        market_data = ctx.session.state.get("market_data")
-        
-        logger.info(f"[{self.name}] 수익 손실 최종 진단 시작")
-        
-        # market_data가 없거나 필수 데이터(curr_smp)가 누락된 경우
-        if not market_data or market_data.get("error_smp") or market_data.get("curr_smp") is None:
-            logger.warning(f"[{self.name}] 필수 시장 데이터 누락으로 분석을 진행할 수 없습니다. (error_smp={market_data.get('error_smp') if market_data else 'N/A'})")
-            # 진단 불가 결과 수동 생성
-            error_result = DiagnosisResult(
-                year_month=settlement_data.year_month if settlement_data else "UNKNOWN",
-                actual_revenue_krw=settlement_data.total_revenue_krw if settlement_data else 0,
-                optimal_revenue_krw=0,
-                opportunity_loss_krw=0,
-                loss_cause=LossCause.UNKNOWN,
-                one_line_message="시장 가격(SMP) 데이터가 부족하여 진단을 수행할 수 없습니다.",
-                address_used=True if settlement_data and settlement_data.address else False
-            )
-            
-            yield create_text_event(
-                self.name,
-                "데이터 부족으로 인한 진단 실패",
-                state_delta={"analysis_result": error_result}
-            )
+        logger.info(f"[{self.name}] 메시지 생성 시작")
+
+        calc = ctx.session.state.get("diagnosis_calc")
+        if not calc:
+            logger.error(f"[{self.name}] diagnosis_calc이 세션에 없습니다.")
             return
 
-        # 사전 계산 및 세션 상태 업데이트
-        if settlement_data and market_data:
-            gen = settlement_data.generation_kwh
-            smp = market_data.get("curr_smp") or 0
-            actual_revenue = settlement_data.total_revenue_krw
-            
-            optimal = int(gen * smp)
-            loss = optimal - actual_revenue
-            
-            # 세션 상태에 저장하여 LLM이 참조할 수 있게 함
-            ctx.session.state["actual_revenue_krw"] = actual_revenue
-            ctx.session.state["optimal_revenue_krw"] = optimal
-            ctx.session.state["opportunity_loss_krw"] = loss
-            
-            # JSON 포맷팅 (Pydantic 객체 및 딕셔너리)
-            ctx.session.state["settlement_data_json"] = settlement_data.model_dump_json()
-            ctx.session.state["market_data_json"] = str(market_data) # market_data는 이미 딕셔너리일 가능성이 높음
-            
-            logger.info(f"[{self.name}] [Diagnosis Inputs]: Gen={gen}, ActualRev={actual_revenue}, CurrentSMP={smp}")
-            logger.info(f"[{self.name}] [Core Calculation]: {gen}kWh * {smp:.2f}원 (SMP) = {optimal}원 (Optimal) vs {actual_revenue}원 (Actual). Result: {loss}원")
+        # analysis_result가 이미 있으면 (에러 케이스) 스킵
+        if ctx.session.state.get("analysis_result"):
+            logger.info(f"[{self.name}] analysis_result가 이미 존재. 메시지 생성 스킵.")
+            return
 
-            # 날씨 비교 로그
-            curr_irr = market_data.get("curr_irr", 0)
-            prev_irr = market_data.get("prev_year_irr", 0)
-            if prev_irr > 0:
-                irr_diff = (curr_irr - prev_irr) / prev_irr * 100
-                logger.info(f"[{self.name}] [Weather Comparison]: Current Irr={curr_irr}, Prev Year Irr={prev_irr}. Diff={irr_diff:.1f}%")
+        settlement_data = ctx.session.state.get("settlement_data")
+
+        # LLM 프롬프트에 사용될 변수를 세션 state에 주입
+        ctx.session.state["cause"] = calc["cause"]
+        ctx.session.state["irr_diff_pct"] = calc["irr_diff_pct"]
+        ctx.session.state["smp_diff_pct"] = calc["smp_diff_pct"]
 
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 최종 진단 프로세스 완료 (소요시간: {duration:.2f}초)")
+                logger.info(f"[{self.name}] 메시지 생성 완료 (소요시간: {duration:.2f}초)")
+
+                # LLM 생성 메시지 추출
+                diagnosis_msg = ctx.session.state.get("diagnosis_message")
+                one_line = ""
+                if isinstance(diagnosis_msg, dict):
+                    one_line = diagnosis_msg.get("one_line_message", "")
+                elif isinstance(diagnosis_msg, str):
+                    one_line = diagnosis_msg
+                else:
+                    one_line = str(diagnosis_msg) if diagnosis_msg else ""
+
+                if not one_line:
+                    # fallback: Python으로 직접 생성
+                    one_line = self._fallback_message(calc)
+
+                # DiagnosisResult 조립
+                cause_map = {
+                    "WEATHER": LossCause.WEATHER,
+                    "SMP": LossCause.SMP,
+                    "COMPLEX": LossCause.COMPLEX,
+                    "UNKNOWN": LossCause.UNKNOWN,
+                }
+                result = DiagnosisResult(
+                    year_month=settlement_data.year_month if settlement_data else "UNKNOWN",
+                    actual_revenue_krw=calc["actual_revenue"],
+                    optimal_revenue_krw=calc["optimal_revenue"],
+                    opportunity_loss_krw=calc["loss"],
+                    potential_recovery_krw=calc["improvement_potential"],
+                    loss_cause=cause_map.get(calc["cause"], LossCause.UNKNOWN),
+                    one_line_message=one_line,
+                    address_used=calc["address_used"],
+                )
+
+                logger.info(f"[{self.name}] [Final DiagnosisResult]: {result.model_dump_json(indent=2)}")
+
+                # analysis_result에 최종 결과 저장
+                yield create_text_event(
+                    self.name,
+                    f"진단 완료: {one_line}",
+                    state_delta={"analysis_result": result},
+                )
+                return
             yield event
+
+    @staticmethod
+    def _fallback_message(calc: dict) -> str:
+        cause = calc["cause"]
+        irr = abs(calc["irr_diff_pct"])
+        smp = abs(calc["smp_diff_pct"])
+        if cause == "WEATHER":
+            return f"주요 원인은 이번달 일조량이 평균보다 {irr}% 낮았기 때문이에요."
+        elif cause == "SMP":
+            return f"주요 원인은 SMP 시장가가 전달 대비 {smp}% 하락했기 때문이에요."
+        elif cause == "COMPLEX":
+            return f"일조량 감소({irr}%)와 SMP 하락({smp}%)이 복합적으로 영향을 줬어요."
+        else:
+            return "이번달은 특이한 손실 원인이 없어요. 예측 오차를 점검해보세요."

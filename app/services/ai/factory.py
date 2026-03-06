@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any
 from app.services.ai.agents.ocr_agent import OcrRefinerAgent
 from app.services.ai.agents.data_agent import DataFetcherAgent
-from app.services.ai.agents.diagnosis_agent import DiagnosisAgent
+from app.services.ai.agents.diagnosis_agent import DiagnosisAgent, DiagnosisCalculatorAgent
 from app.services.ai.agents.visual_agent import DirectVisionAgent
 from app.services.ai.agents.vision_agent import VisionAgent
 
@@ -26,25 +26,24 @@ class AgentFactory:
 
     @classmethod
     def get_vision_agent(cls) -> VisionAgent:
-        """기본 Google Cloud Vision OCR 에이전트를 반환합니다."""
         return cls._get_cached_instance(VisionAgent)
 
     @classmethod
     def get_ocr_refiner_agent(cls) -> OcrRefinerAgent:
-        """OCR 텍스트를 정산 데이터로 정제하는 에이전트를 반환합니다."""
         return cls._get_cached_instance(OcrRefinerAgent)
 
     @classmethod
     def get_visual_agent(cls) -> DirectVisionAgent:
-        """이미지를 직접 분석하는 시각 에이전트를 반환합니다."""
         return cls._get_cached_instance(DirectVisionAgent)
 
     @classmethod
     def get_data_fetcher_agent(cls) -> DataFetcherAgent:
-        """외부 기상/시장 데이터를 조회하는 에이전트를 반환합니다."""
         return cls._get_cached_instance(DataFetcherAgent)
 
     @classmethod
+    def get_diagnosis_calculator_agent(cls) -> DiagnosisCalculatorAgent:
+        return cls._get_cached_instance(DiagnosisCalculatorAgent)
+
+    @classmethod
     def get_diagnosis_agent(cls) -> DiagnosisAgent:
-        """수익 손실을 최종 진단하는 에이전트를 반환합니다."""
         return cls._get_cached_instance(DiagnosisAgent)

@@ -1,10 +1,36 @@
 import logging
 import time
 from google.adk.agents import LlmAgent
+from google.genai import types
 from app.schemas.ai.settlement import SettlementOcrData
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _inject_image_before_model(callback_context, llm_request):
+    """before_model_callback: 세션 state의 image_bytes를 LLM 요청에 이미지 Part로 주입"""
+    image_bytes = callback_context.state.get("image_bytes")
+    if not image_bytes:
+        logger.error("[direct_vision] before_model_callback: image_bytes가 세션에 없습니다.")
+        return None
+
+    image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+    # 마지막 user content에 이미지 파트 추가
+    for content in reversed(llm_request.contents):
+        if content.role == "user":
+            content.parts.append(image_part)
+            logger.info(f"[direct_vision] 이미지 Part를 user content에 주입 완료 ({len(image_bytes)} bytes)")
+            break
+    else:
+        # user content가 없으면 새로 생성
+        llm_request.contents.append(
+            types.Content(role="user", parts=[image_part])
+        )
+        logger.info(f"[direct_vision] 새 user content로 이미지 Part 주입 완료 ({len(image_bytes)} bytes)")
+
+    return None  # None을 반환하면 LLM 호출 진행
+
 
 class DirectVisionAgent(LlmAgent):
     """
@@ -15,33 +41,35 @@ class DirectVisionAgent(LlmAgent):
             name="direct_vision",
             model=settings.GEMINI_MODEL,
             instruction="""
-            이 이미지는 태양광 발전소 정산서입니다. 
+            이 이미지는 태양광 발전소 정산서입니다.
             이미지를 직접 보고 다음 정보를 정확하게 추출하세요:
             - 정산 연월 (YYYY-MM 형식. 이미지에 명시된 발행 연도를 확인하세요. 만약 '2019'가 보인다면 반드시 2019-MM 형식으로 추출해야 하며, 절대 현재 연도로 추측하지 마세요.)
             - 실제 발전량 (kWh 단위, '발전량' 항목 확인)
             - 정산 기준 단가 (원/kWh 단위, '기준단가' 또는 '단가' 항목 확인)
             - 실제 총 수령액 (원 단위, 반드시 '공급가액' 항목을 추출하세요. 부가세 포함 금액과 혼동 주의)
-            
+
             출력은 SettlementOcrData 스키마를 따르세요.
             """,
             output_schema=SettlementOcrData,
-            output_key="visual_data"
+            output_key="visual_data",
+            before_model_callback=_inject_image_before_model,
         )
         logger.info(f"[{self.name}] 에이전트가 초기화되었습니다.")
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] 이미지 직접 시각 분석 시작")
-        
-        # image_bytes는 이미 session.state에 있음 (TelegramService에서 주입)
-        # LlmAgent는 session.state를 기반으로 instruction의 변수를 치환하거나 
-        # 멀티모달 입력을 처리함.
-        
+
+        image_bytes = ctx.session.state.get("image_bytes")
+        if not image_bytes:
+            logger.error(f"[{self.name}] 세션에 image_bytes가 없습니다. 분석 불가.")
+            return
+
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] 시각 분석 프로세스 완료 (소요시간: {duration:.2f}초)")
-                
+
                 visual_data = ctx.session.state.get("visual_data")
                 if visual_data:
                     logger.info(f"[{self.name}] [Result JSON]: {visual_data.model_dump_json(indent=2)}")
