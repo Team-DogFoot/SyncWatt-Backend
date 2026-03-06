@@ -25,16 +25,30 @@ class TelegramService:
         self.runner.auto_create_session = True
         logger.info("TelegramService가 성공적으로 초기화되었습니다.")
 
-    async def send_text_message(self, chat_id: int, text: str):
-        """사용자에게 텍스트 메시지를 전송합니다."""
+    async def send_text_message(self, chat_id: int, text: str) -> int | None:
+        """사용자에게 텍스트 메시지를 전송하고 message_id를 반환합니다."""
         try:
             async with httpx.AsyncClient() as client:
                 data = {'chat_id': chat_id, 'text': text, 'parse_mode': 'Markdown'}
                 response = await client.post(f"{self.base_url}/sendMessage", data=data)
                 response.raise_for_status()
-                logger.debug(f"[Telegram] 메시지 전송 완료 (chat_id: {chat_id})")
+                msg_id = response.json().get("result", {}).get("message_id")
+                logger.debug(f"[Telegram] 메시지 전송 완료 (chat_id: {chat_id}, message_id: {msg_id})")
+                return msg_id
         except Exception as e:
             logger.error(f"[Telegram] 메시지 전송 실패: {str(e)}")
+            return None
+
+    async def delete_message(self, chat_id: int, message_id: int):
+        """텔레그램 메시지를 삭제합니다."""
+        try:
+            async with httpx.AsyncClient() as client:
+                data = {'chat_id': chat_id, 'message_id': message_id}
+                response = await client.post(f"{self.base_url}/deleteMessage", data=data)
+                response.raise_for_status()
+                logger.debug(f"[Telegram] 메시지 삭제 완료 (chat_id: {chat_id}, message_id: {message_id})")
+        except Exception as e:
+            logger.debug(f"[Telegram] 메시지 삭제 실패 (무시): {str(e)}")
 
     def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data, market_data: dict):
         """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
@@ -109,12 +123,12 @@ class TelegramService:
         if loss_val > 0:
             cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
         else:
-            cause_section = f"💡 *참고*\n{analysis.one_line_message} 다만 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
+            cause_section = f"💡 *참고*\n이번달 {self._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
 
         # ── SMP 맥락 ──
         smp_section = ""
         if analysis.smp_context_message:
-            smp_section = f"\n\n📈 *알아두세요*\n{analysis.smp_context_message}"
+            smp_section = f"\n\n📈 *알아두시면 좋아요*\n{analysis.smp_context_message}"
 
         # ── 회수 가능 (손실 양수일 때만) ──
         recovery_section = ""
@@ -133,7 +147,7 @@ class TelegramService:
         # ── 위치 안내 ──
         location = ""
         if not analysis.address_used:
-            location = "\n\n📍 위치를 등록하면 지역 일조량 기반 정밀 분석이 가능해요."
+            location = "\n\n📍 현재 전국 평균 일조량으로 분석했어요. 위치를 등록하면 우리 발전소 지역 기반 정밀 분석이 가능해요."
 
         # ── 조립 ──
         msg = (
@@ -149,6 +163,16 @@ class TelegramService:
             f"\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
         )
         return msg
+
+    @staticmethod
+    def _simplify_cause(one_line: str) -> str:
+        """'주요 원인은 ... 때문이에요' → '일조량이 ... 낮았지만,' 형태로 변환합니다."""
+        s = one_line.replace("주요 원인은 ", "").replace("이번달 ", "")
+        s = s.replace("때문이에요.", "").replace("때문이에요", "")
+        s = s.strip()
+        if s:
+            return f"{s}지만,"
+        return ""
 
     async def handle_photo_message(self, update: Update):
         """이미지 메시지를 수신하여 분석 파이프라인을 실행합니다."""
@@ -166,8 +190,8 @@ class TelegramService:
         logger.info(f"[Telegram] 새 이미지 수신 (사용자: {user_id_str}, 세션: {session_id})")
 
         try:
-            # 1. 초기 접수 알림
-            await self.send_text_message(chat_id, "🔍 정산서 이미지를 확인했습니다. 분석을 시작합니다... (약 10~15초 소요)")
+            # 1. 초기 접수 알림 (분석 완료 후 삭제)
+            loading_msg_id = await self.send_text_message(chat_id, "🔍 정산서 이미지를 확인했습니다. 분석을 시작합니다... (약 10~15초 소요)")
 
             # 2. 이미지 다운로드
             async with httpx.AsyncClient() as client:
@@ -214,6 +238,10 @@ class TelegramService:
             settlement_data = session.state.get("settlement_data")
             market_data = session.state.get("market_data")
             
+            # 초기 알림 삭제
+            if loading_msg_id:
+                await self.delete_message(chat_id, loading_msg_id)
+
             if analysis_data:
                 # 결과 데이터 파싱 (Pydantic 모델 검증)
                 if isinstance(analysis_data, DiagnosisResult):
