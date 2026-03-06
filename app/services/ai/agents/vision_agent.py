@@ -33,8 +33,7 @@ class VisionAgent(BaseAgent):
             client = get_vision_client()
             image = vision.Image(content=image_bytes)
             
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(None, client.text_detection, image)
+            response = await asyncio.to_thread(client.text_detection, image)
             
             texts = response.text_annotations
             extracted_text = texts[0].description if texts else ""

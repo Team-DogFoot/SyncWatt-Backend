@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import SQLModel, Field
 from app.schemas.ai.diagnosis import LossCause
@@ -16,4 +16,4 @@ class MonthlySettlement(SQLModel, table=True):
     opportunity_cost_krw: Optional[int] = None
     loss_reason: Optional[LossCause] = None # weather / smp / complex / unknown
     source: str # ocr / eds_api / excel_upload
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
