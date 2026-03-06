@@ -123,7 +123,7 @@ class TelegramService:
         if loss_val > 0:
             cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
         else:
-            cause_section = f"💡 *참고*\n이번달 {self._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
+            cause_section = f"💡 *참고*\n이번달 {TelegramService._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
 
         # ── SMP 맥락 ──
         smp_section = ""
