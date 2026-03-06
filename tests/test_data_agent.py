@@ -35,8 +35,6 @@ async def test_data_fetcher_station_mapping(agent, mock_ctx):
             address=address,
             generation_kwh=1000.0,
             total_revenue_krw=200000,
-            customer_name="Test User",
-            plant_name="Test Plant"
         )
         
         with patch("app.services.ai.agents.data_agent.smp_service.get_avg_smp", return_value=150.0), \
@@ -62,8 +60,6 @@ async def test_data_fetcher_smp_none_handling(agent, mock_ctx):
         address="서울시",
         generation_kwh=1000.0,
         total_revenue_krw=200000,
-        customer_name="Test User",
-        plant_name="Test Plant"
     )
 
     with patch("app.services.ai.agents.data_agent.smp_service.get_avg_smp", return_value=None), \
@@ -98,8 +94,6 @@ async def test_data_fetcher_prev_year_dt(agent, mock_ctx):
         address="서울시",
         generation_kwh=1000.0,
         total_revenue_krw=200000,
-        customer_name="Test User",
-        plant_name="Test Plant"
     )
 
     with patch("app.services.ai.agents.data_agent.smp_service.get_avg_smp", return_value=150.0), \

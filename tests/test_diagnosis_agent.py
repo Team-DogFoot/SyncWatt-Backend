@@ -93,9 +93,7 @@ async def test_diagnosis_agent_handles_error_smp_flag():
         year_month="2024-02",
         generation_kwh=1000.0,
         total_revenue_krw=150000,
-        address="Test Address",
-        customer_name="Test User",
-        plant_name="Test Plant"
+        address="Test Address"
     )
     
     ctx.session.state = {
