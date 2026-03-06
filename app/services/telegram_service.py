@@ -177,7 +177,7 @@ class TelegramService:
                     "• SMP 시세 기반 최적 입찰가\n"
                     "• 일조량 예보 연동 발전량 예측\n"
                     "• 한전 vs KPX 유불리 알림",
-                    [[{"text": "📈 최적 입찰가 받기", "callback_data": "subscribe_bidding"}]],
+                    [[{"text": "📈 내일 최적 입찰가 알림 받기", "callback_data": "subscribe_bidding"}]],
                 )
                 await self.client.send_inline_keyboard(
                     chat_id,
@@ -187,7 +187,7 @@ class TelegramService:
                     "• 연간 누적 기회비용 분석\n"
                     "• 지역 일조량 기반 정밀 분석\n"
                     "• 원청 제출용 PDF 리포트",
-                    [[{"text": "📊 월간 성적표 받기", "callback_data": "subscribe_report"}]],
+                    [[{"text": "📉 지난달 기회비용 확인하기", "callback_data": "subscribe_report"}]],
                 )
             else:
                 logger.warning(f"[Telegram] Analysis result missing (session: {session_id})")

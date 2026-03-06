@@ -57,7 +57,7 @@ def build_response_message(analysis: DiagnosisResult) -> str:
     # SMP context
     smp_section = ""
     if analysis.smp_context_message:
-        smp_section = f"\n\n📈 *알아두시면 좋아요*\n{analysis.smp_context_message}"
+        smp_section = f"\n\n📈 *체크 포인트*\n{analysis.smp_context_message}"
 
     # Recovery (only when loss > 0)
     recovery_section = ""
@@ -67,10 +67,10 @@ def build_response_message(analysis: DiagnosisResult) -> str:
 
     # CTA
     cta = (
-        "\n\n✅ *가입하면 받을 수 있어요*\n"
-        "• 매일 아침 최적 입찰가 추천\n"
-        "• 월간 발전소 성적표\n"
-        "• 연간 누적 기회비용 분석"
+        "\n\n✅ *이런 고민, SyncWatt가 해결해드려요*\n"
+        "• \"오늘 입찰가를 얼마로 넣어야 할지 매번 감이에요\"\n"
+        "• \"한전이랑 KPX 중 어떤 게 유리한지 계산이 번거로워요\"\n"
+        "• \"작년에 기회비용이 얼마였는지 몰라요\""
     )
 
     # Location notice
