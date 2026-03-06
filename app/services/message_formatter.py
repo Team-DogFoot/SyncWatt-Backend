@@ -57,7 +57,7 @@ def build_response_message(analysis: DiagnosisResult) -> str:
     # SMP context
     smp_section = ""
     if analysis.smp_context_message:
-        smp_section = f"\n\n📈 *체크 포인트*\n{analysis.smp_context_message}"
+        smp_section = f"\n\n📈 *알아두시면 좋아요*\n{analysis.smp_context_message}"
 
     # Recovery (only when loss > 0)
     recovery_section = ""
