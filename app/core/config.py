@@ -4,7 +4,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "SyncWatt-Backend"
     # .env 또는 환경변수에서 로드
     TELEGRAM_BOT_TOKEN: str
-    WEBHOOK_SECRET_TOKEN: str | None = "syncwatt_secret_1234"
+    WEBHOOK_SECRET_TOKEN: str | None = None
     
     # 텔레그램 API 베이스 URL
     TELEGRAM_API_URL: str = "https://api.telegram.org/bot"
