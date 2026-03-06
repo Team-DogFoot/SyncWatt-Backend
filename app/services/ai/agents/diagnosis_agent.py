@@ -52,16 +52,18 @@ class DiagnosisCalculatorAgent(BaseAgent):
 
         calc = calculate_and_diagnose(settlement_data, market_data)
 
-        # 세션에 계산 결과 저장 (DiagnosisAgent가 참조)
-        ctx.session.state["diagnosis_calc"] = calc
-
         duration = time.perf_counter() - start_t
-        logger.info(f"[{self.name}] 진단 계산 완료 (소요시간: {duration:.2f}초)")
+        logger.info(f"[{self.name}] Diagnosis calculation done ({duration:.2f}s)")
 
         yield create_text_event(
             self.name,
-            f"진단 계산 완료: cause={calc['cause']}, loss={calc['loss']}",
-            state_delta={"diagnosis_calc": calc},
+            f"Diagnosis done: cause={calc['cause']}, loss={calc['loss']}",
+            state_delta={
+                "diagnosis_calc": calc,
+                "cause": calc["cause"],
+                "irr_diff_pct": calc["irr_diff_pct"],
+                "smp_diff_pct": calc["smp_diff_pct"],
+            },
         )
 
 
@@ -110,10 +112,8 @@ class DiagnosisAgent(LlmAgent):
 
         settlement_data = ctx.session.state.get("settlement_data")
 
-        # LLM 프롬프트에 사용될 변수를 세션 state에 주입
-        ctx.session.state["cause"] = calc["cause"]
-        ctx.session.state["irr_diff_pct"] = calc["irr_diff_pct"]
-        ctx.session.state["smp_diff_pct"] = calc["smp_diff_pct"]
+        # cause, irr_diff_pct, smp_diff_pct are already in session state
+        # (set via state_delta by DiagnosisCalculatorAgent)
 
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
