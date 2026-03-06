@@ -4,6 +4,7 @@ from google.adk.agents import BaseAgent
 from app.services.external.kma_service import kma_service
 from app.services.external.smp_service import smp_service
 from app.services.ai.utils import create_text_event
+from app.services.ai.state_keys import SETTLEMENT_DATA, MARKET_DATA
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class DataFetcherAgent(BaseAgent):
         )
 
     async def _run_async_impl(self, ctx):
-        settlement_data = ctx.session.state.get("settlement_data")
+        settlement_data = ctx.session.state.get(SETTLEMENT_DATA)
         if not settlement_data:
             logger.error(f"[{self.name}] Missing settlement_data in session state")
             yield create_text_event(self.name, "Settlement data missing in session state.")
@@ -157,7 +158,7 @@ class DataFetcherAgent(BaseAgent):
             yield create_text_event(
                 self.name,
                 f"Fetched data for {year_month}.",
-                state_delta={"market_data": market_data}
+                state_delta={MARKET_DATA: market_data}
             )
         except Exception as e:
             logger.error(f"[{self.name}] Error fetching data: {str(e)}", exc_info=True)

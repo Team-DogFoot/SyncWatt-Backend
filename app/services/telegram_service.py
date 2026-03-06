@@ -13,6 +13,10 @@ from google.genai import types
 from sqlmodel import Session
 from app.db.session import engine
 from app.models.settlement import MonthlySettlement
+from app.services.ai.state_keys import (
+    IMAGE_BYTES, RAW_TEXT, SETTLEMENT_DATA, VISUAL_DATA,
+    MARKET_DATA, DIAGNOSIS_CALC, ANALYSIS_RESULT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -114,13 +118,13 @@ class TelegramService:
             # 3. ADK 파이프라인 실행 (세션 state 초기화 포함)
             logger.info("[Pipeline] Analysis pipeline starting")
             initial_state = {
-                "image_bytes": image_bytes,
-                "raw_text": None,
-                "settlement_data": None,
-                "visual_data": None,
-                "market_data": None,
-                "diagnosis_calc": None,
-                "analysis_result": None,
+                IMAGE_BYTES: image_bytes,
+                RAW_TEXT: None,
+                SETTLEMENT_DATA: None,
+                VISUAL_DATA: None,
+                MARKET_DATA: None,
+                DIAGNOSIS_CALC: None,
+                ANALYSIS_RESULT: None,
             }
             async for event in self.runner.run_async(
                 user_id=user_id_str,
@@ -137,9 +141,9 @@ class TelegramService:
                 session_id=session_id
             )
             
-            analysis_data = session.state.get("analysis_result")
-            settlement_data = session.state.get("settlement_data")
-            market_data = session.state.get("market_data")
+            analysis_data = session.state.get(ANALYSIS_RESULT)
+            settlement_data = session.state.get(SETTLEMENT_DATA)
+            market_data = session.state.get(MARKET_DATA)
             
             # 초기 알림 삭제
             if loading_msg_id:

@@ -4,6 +4,10 @@ from google.adk.agents import BaseAgent
 from app.schemas.ai.diagnosis import DiagnosisResult, LossCause
 from app.services.ai.utils import create_text_event
 from app.services.ai.diagnosis_service import calculate_and_diagnose
+from app.services.ai.state_keys import (
+    SETTLEMENT_DATA, MARKET_DATA, DIAGNOSIS_CALC,
+    CAUSE, IRR_DIFF_PCT, SMP_DIFF_PCT, ANALYSIS_RESULT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +24,8 @@ class DiagnosisCalculatorAgent(BaseAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] Starting diagnosis calculation")
 
-        settlement_data = ctx.session.state.get("settlement_data")
-        market_data = ctx.session.state.get("market_data")
+        settlement_data = ctx.session.state.get(SETTLEMENT_DATA)
+        market_data = ctx.session.state.get(MARKET_DATA)
 
         if not settlement_data:
             logger.error(f"[{self.name}] settlement_data missing")
@@ -43,7 +47,7 @@ class DiagnosisCalculatorAgent(BaseAgent):
             yield create_text_event(
                 self.name,
                 "데이터 부족으로 인한 진단 실패",
-                state_delta={"analysis_result": error_result},
+                state_delta={ANALYSIS_RESULT: error_result},
             )
             return
 
@@ -56,10 +60,10 @@ class DiagnosisCalculatorAgent(BaseAgent):
             self.name,
             f"Diagnosis done: cause={calc['cause']}, loss={calc['loss']}",
             state_delta={
-                "diagnosis_calc": calc,
-                "cause": calc["cause"],
-                "irr_diff_pct": calc["irr_diff_pct"],
-                "smp_diff_pct": calc["smp_diff_pct"],
+                DIAGNOSIS_CALC: calc,
+                CAUSE: calc["cause"],
+                IRR_DIFF_PCT: calc["irr_diff_pct"],
+                SMP_DIFF_PCT: calc["smp_diff_pct"],
             },
         )
 
@@ -77,16 +81,16 @@ class DiagnosisAgent(BaseAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] Starting result assembly")
 
-        calc = ctx.session.state.get("diagnosis_calc")
+        calc = ctx.session.state.get(DIAGNOSIS_CALC)
         if not calc:
             logger.error(f"[{self.name}] diagnosis_calc not found in session")
             return
 
-        if ctx.session.state.get("analysis_result"):
+        if ctx.session.state.get(ANALYSIS_RESULT):
             logger.info(f"[{self.name}] analysis_result already exists. Skipping.")
             return
 
-        settlement_data = ctx.session.state.get("settlement_data")
+        settlement_data = ctx.session.state.get(SETTLEMENT_DATA)
         one_line = self._build_message(calc)
 
         cause_map = {
@@ -119,7 +123,7 @@ class DiagnosisAgent(BaseAgent):
         yield create_text_event(
             self.name,
             f"진단 완료: {one_line}",
-            state_delta={"analysis_result": result},
+            state_delta={ANALYSIS_RESULT: result},
         )
 
     @staticmethod

@@ -4,13 +4,14 @@ from google.adk.agents import LlmAgent
 from google.genai import types
 from app.schemas.ai.settlement import SettlementOcrData
 from app.core.config import settings
+from app.services.ai.state_keys import IMAGE_BYTES, VISUAL_DATA
 
 logger = logging.getLogger(__name__)
 
 
 def _inject_image_before_model(callback_context, llm_request):
     """before_model_callback: 세션 state의 image_bytes를 LLM 요청에 이미지 Part로 주입"""
-    image_bytes = callback_context.state.get("image_bytes")
+    image_bytes = callback_context.state.get(IMAGE_BYTES)
     if not image_bytes:
         logger.error("[direct_vision] before_model_callback: image_bytes not found in session")
         return None
@@ -62,7 +63,7 @@ class DirectVisionAgent(LlmAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] Starting direct image visual analysis")
 
-        image_bytes = ctx.session.state.get("image_bytes")
+        image_bytes = ctx.session.state.get(IMAGE_BYTES)
         if not image_bytes:
             logger.error(f"[{self.name}] image_bytes not found in session. Analysis not possible.")
             return
@@ -72,7 +73,7 @@ class DirectVisionAgent(LlmAgent):
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] Visual analysis process complete ({duration:.2f}s)")
 
-                visual_data = event.actions.state_delta.get("visual_data")
+                visual_data = event.actions.state_delta.get(VISUAL_DATA)
                 if visual_data:
                     logger.info(f"[{self.name}] [Result]: {visual_data}")
                 else:

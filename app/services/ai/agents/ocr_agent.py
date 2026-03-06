@@ -3,6 +3,7 @@ import time
 from google.adk.agents import LlmAgent
 from app.schemas.ai.settlement import SettlementOcrData
 from app.core.config import settings
+from app.services.ai.state_keys import RAW_TEXT, SETTLEMENT_DATA
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class OcrRefinerAgent(LlmAgent):
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        raw_text = ctx.session.state.get("raw_text", "")
+        raw_text = ctx.session.state.get(RAW_TEXT, "")
         logger.info(f"[{self.name}] Starting OCR data refinement (input text length: {len(raw_text)})")
 
         if not raw_text:
@@ -76,7 +77,7 @@ class OcrRefinerAgent(LlmAgent):
                 duration = time.perf_counter() - start_t
                 logger.info(f"[{self.name}] Data refinement process complete ({duration:.2f}s)")
 
-                refined_data = event.actions.state_delta.get("settlement_data")
+                refined_data = event.actions.state_delta.get(SETTLEMENT_DATA)
                 if refined_data:
                     logger.info(f"[{self.name}] [Result]: {refined_data}")
                 else:

@@ -5,6 +5,7 @@ from google.adk.agents import BaseAgent
 from google.cloud import vision
 from app.core.gcp import get_vision_client
 from app.services.ai.utils import create_text_event
+from app.services.ai.state_keys import IMAGE_BYTES, RAW_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ class VisionAgent(BaseAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] Starting image text extraction")
         
-        image_bytes = ctx.session.state.get("image_bytes")
+        image_bytes = ctx.session.state.get(IMAGE_BYTES)
         if not image_bytes:
             logger.error(f"[{self.name}] No image data in session")
             yield create_text_event(self.name, "분석할 이미지 데이터가 세션에 존재하지 않습니다.")
@@ -44,7 +45,7 @@ class VisionAgent(BaseAgent):
             yield create_text_event(
                 self.name, 
                 f"이미지에서 {len(extracted_text)}자의 텍스트를 추출했습니다.",
-                state_delta={"raw_text": extracted_text}
+                state_delta={RAW_TEXT: extracted_text}
             )
         except Exception as e:
             logger.error(f"[{self.name}] Error during OCR processing: {str(e)}", exc_info=True)

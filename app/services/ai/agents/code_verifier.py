@@ -3,6 +3,7 @@ import time
 from google.adk.agents import BaseAgent
 from app.schemas.ai.settlement import SettlementOcrData
 from app.services.ai.utils import create_text_event
+from app.services.ai.state_keys import SETTLEMENT_DATA, VISUAL_DATA, ANALYSIS_RESULT  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,8 @@ class CodeVerifierAgent(BaseAgent):
         start_t = time.perf_counter()
         logger.info(f"[{self.name}] Starting code-based data verification")
 
-        ocr_data_dict = ctx.session.state.get("settlement_data")
-        visual_data_dict = ctx.session.state.get("visual_data")
+        ocr_data_dict = ctx.session.state.get(SETTLEMENT_DATA)
+        visual_data_dict = ctx.session.state.get(VISUAL_DATA)
 
         # 딕셔너리 또는 Pydantic 객체 대응
         ocr = self._to_model(ocr_data_dict)
@@ -93,7 +94,7 @@ class CodeVerifierAgent(BaseAgent):
             yield create_text_event(
                 self.name,
                 f"데이터 검증 완료: {reason}",
-                state_delta={"settlement_data": final_choice}
+                state_delta={SETTLEMENT_DATA: final_choice}
             )
         else:
             logger.error(f"[{self.name}] Verification failed: no valid data found")
