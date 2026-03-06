@@ -93,7 +93,7 @@ class TelegramService:
         summary_lines.append(f"• 실제 수령: {actual}원 (단가 {unit_str}원/kWh)")
 
         smp_str = f"{analysis.curr_smp:.1f}" if analysis.curr_smp else "?"
-        summary_lines.append(f"• KPX 기대수익: {optimal}원 (SMP 평균 {smp_str}원/kWh)")
+        summary_lines.append(f"• 전력시장 직접 판매 시(KPX): {optimal}원 (시장가(SMP) 평균 {smp_str}원/kWh)")
 
         summary = "\n".join(summary_lines)
 
@@ -101,12 +101,15 @@ class TelegramService:
         if loss_val > 0:
             verdict = f"→ 이번 달은 약 *{loss_abs}원*의 기회손실이 있었어요."
         elif loss_val == 0:
-            verdict = "→ 이번 달은 KPX 기대수익과 동일해요."
+            verdict = "→ 이번 달은 전력시장 직접 판매 시와 동일해요."
         else:
-            verdict = f"→ 현재 계약이 이번달 기준 *{loss_abs}원* 유리했어요."
+            verdict = f"→ 한전 고정단가 계약이 이번달 기준 *{loss_abs}원* 유리했어요."
 
         # ── 원인 ──
-        cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
+        if loss_val > 0:
+            cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
+        else:
+            cause_section = f"💡 *참고*\n{analysis.one_line_message} 다만 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
 
         # ── SMP 맥락 ──
         smp_section = ""
