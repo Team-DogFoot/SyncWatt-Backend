@@ -154,13 +154,22 @@ class TelegramService:
                     logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
 
                 # 최종 응답 구성 (판단 없이 숫자만 제공)
-                response_text = (
-                    f"📝 *지난달 손실 진단 결과*\n\n"
-                    f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n"
-                    f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
-                    f"💡 *주요 원인*\n"
-                    f"{analysis.one_line_message}"
-                )
+                if loss_val > 0:
+                    response_text = (
+                        f"📝 *지난달 손실 진단 결과*\n\n"
+                        f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n"
+                        f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
+                        f"💡 *주요 원인*\n"
+                        f"{analysis.one_line_message}"
+                    )
+                else:
+                    response_text = (
+                        f"📝 *지난달 손실 진단 결과*\n\n"
+                        f"실제 수령 {actual_formatted}원 > KPX 기대수익 {optimal_formatted}원\n"
+                        f"현재 계약이 이번달 기준 {loss_formatted}원 유리했어요.\n\n"
+                        f"💡 *주요 원인*\n"
+                        f"{analysis.one_line_message}"
+                    )
 
                 if loss_val > 0 and recovery > 0:
                     response_text += (

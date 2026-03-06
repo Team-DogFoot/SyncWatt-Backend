@@ -43,7 +43,7 @@ class KMAService:
             "pageNo": 1,
             "dataType": "JSON",
             "dataCd": "ASOS",
-            "dateKind": "DAY",
+            "dateCd": "DAY",
             "startDt": start_dt,
             "endDt": end_dt,
             "stnIds": stn_id,
@@ -66,7 +66,7 @@ class KMAService:
                 total_gs = 0.0
                 count = 0
                 for item in items:
-                    gs = item.get("sumGs")
+                    gs = item.get("sumGsr")
                     if gs and str(gs).strip():
                         total_gs += float(gs)
                         count += 1
