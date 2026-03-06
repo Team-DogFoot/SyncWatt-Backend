@@ -165,14 +165,11 @@ class TelegramService:
                 logger.info(f"[Telegram] Analysis result sent (session: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
-                # 상세 리포트 사전예약 버튼
+                # 상세 보고서 버튼 (누르면 사전예약 안내로 이어짐)
                 await self.client.send_inline_keyboard(
                     chat_id,
-                    "📊 *상세 리포트는 4월에 오픈 예정이에요.*\n오픈 시 알림을 받아보시겠어요?",
-                    [[
-                        {"text": "알림 받기 ✅", "callback_data": "preregister_yes"},
-                        {"text": "괜찮아요", "callback_data": "preregister_no"},
-                    ]],
+                    "더 자세한 분석이 궁금하시다면:",
+                    [[{"text": "📊 상세 보고서 보기", "callback_data": "show_report_detail"}]],
                 )
             else:
                 logger.warning(f"[Telegram] Analysis result missing (session: {session_id})")
@@ -203,7 +200,16 @@ class TelegramService:
             # Telegram callback 응답 (로딩 표시 제거)
             await self.client.answer_callback_query(cb_id)
 
-            if data == "preregister_yes":
+            if data == "show_report_detail":
+                await self.client.send_inline_keyboard(
+                    chat_id,
+                    "📊 *상세 리포트는 4월에 오픈 예정이에요.*\n오픈 시 알림을 받아보시겠어요?",
+                    [[
+                        {"text": "알림 받기 ✅", "callback_data": "preregister_yes"},
+                        {"text": "괜찮아요", "callback_data": "preregister_no"},
+                    ]],
+                )
+            elif data == "preregister_yes":
                 self._save_pre_registration(chat_id)
                 await self.client.send_message(
                     chat_id,
