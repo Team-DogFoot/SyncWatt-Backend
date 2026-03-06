@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.schemas.external import IrradianceData
+from app.services.external.geocoding import get_coordinates
 from app.services.external.weather import NasaPowerProvider
 
 
@@ -109,8 +110,6 @@ async def test_nasa_provider_missing_month_returns_fallback(provider):
         with pytest.raises(ValueError, match="결측"):
             await provider.get_monthly_irradiance(2024, 1, 37.57, 126.98)
 
-
-from app.services.external.geocoding import get_coordinates
 
 
 def test_geocoding_jeonnam_haenam():
