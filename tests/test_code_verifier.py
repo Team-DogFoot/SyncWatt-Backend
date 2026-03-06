@@ -120,3 +120,43 @@ async def test_code_verifier_is_same_logic():
     final_data = get_final_settlement_data(events)
     assert final_data is not None
     assert "주요 필드에서 일치" in final_data.selection_reason
+
+
+@pytest.mark.asyncio
+async def test_code_verifier_both_none_sets_error():
+    """When both OCR and Visual are None, should set analysis_result with error."""
+    agent = CodeVerifierAgent()
+    ctx = MagicMock()
+    ctx.session.state = {
+        "settlement_data": None,
+        "visual_data": None,
+    }
+
+    events = []
+    async for event in agent._run_async_impl(ctx):
+        events.append(event)
+
+    assert len(events) == 1
+    delta = events[0].actions.state_delta
+    assert "analysis_result" in delta
+    result = delta["analysis_result"]
+    assert result.opportunity_loss_krw == 0
+
+
+@pytest.mark.asyncio
+async def test_code_verifier_both_invalid_sets_error():
+    """When both results fail Pydantic parsing, should set analysis_result with error."""
+    agent = CodeVerifierAgent()
+    ctx = MagicMock()
+    ctx.session.state = {
+        "settlement_data": {"invalid": "data"},
+        "visual_data": {"also": "invalid"},
+    }
+
+    events = []
+    async for event in agent._run_async_impl(ctx):
+        events.append(event)
+
+    assert len(events) == 1
+    delta = events[0].actions.state_delta
+    assert "analysis_result" in delta

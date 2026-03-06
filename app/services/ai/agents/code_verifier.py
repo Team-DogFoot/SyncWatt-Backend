@@ -3,7 +3,7 @@ import time
 from google.adk.agents import BaseAgent
 from app.schemas.ai.settlement import SettlementOcrData
 from app.services.ai.utils import create_text_event
-from app.services.ai.state_keys import SETTLEMENT_DATA, VISUAL_DATA, ANALYSIS_RESULT  # noqa: F401
+from app.services.ai.state_keys import SETTLEMENT_DATA, VISUAL_DATA, ANALYSIS_RESULT
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +97,22 @@ class CodeVerifierAgent(BaseAgent):
                 state_delta={SETTLEMENT_DATA: final_choice}
             )
         else:
+            from app.schemas.ai.diagnosis import DiagnosisResult, LossCause
             logger.error(f"[{self.name}] Verification failed: no valid data found")
-            yield create_text_event(self.name, "데이터 검증 중 오류가 발생했습니다. 유효한 정보를 찾을 수 없습니다.")
+            error_result = DiagnosisResult(
+                year_month="UNKNOWN",
+                actual_revenue_krw=0,
+                optimal_revenue_krw=0,
+                opportunity_loss_krw=0,
+                loss_cause=LossCause.UNKNOWN,
+                one_line_message="이미지에서 정산 정보를 추출하지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.",
+                address_used=False,
+            )
+            yield create_text_event(
+                self.name,
+                reason,
+                state_delta={ANALYSIS_RESULT: error_result},
+            )
 
         duration = time.perf_counter() - start_t
         logger.info(f"[{self.name}] Verification complete ({duration:.2f}s)")
