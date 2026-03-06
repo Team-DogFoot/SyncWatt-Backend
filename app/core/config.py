@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     KMA_API_KEY: str | None = None
     KPX_API_KEY: str | None = None
 
+    # AWS S3 (이미지 저장)
+    AWS_ACCESS_KEY_ID: str | None = None
+    AWS_SECRET_ACCESS_KEY: str | None = None
+    AWS_S3_BUCKET: str = "syncwatt-images"
+    AWS_REGION: str = "ap-northeast-2"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 settings = Settings()
