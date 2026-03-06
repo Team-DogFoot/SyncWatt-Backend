@@ -40,6 +40,7 @@ async def telegram_webhook(
             background_tasks.add_task(telegram_service.handle_callback_query, update.callback_query)
         elif update.message and update.message.text:
             logger.info(f"[Webhook] Text update detected: {update.message.text[:50]}...")
+            background_tasks.add_task(telegram_service.handle_text_message, update)
         else:
             logger.info(f"[Webhook] Other update type received (id: {update.update_id})")
 

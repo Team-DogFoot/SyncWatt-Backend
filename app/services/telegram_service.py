@@ -2,6 +2,8 @@ import httpx
 import json
 import logging
 import time
+from collections import defaultdict
+from datetime import date
 from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
@@ -14,6 +16,9 @@ from app.models.settlement import MonthlySettlement
 
 logger = logging.getLogger(__name__)
 
+DAILY_ANALYSIS_LIMIT = 3
+
+
 class TelegramService:
     """
     텔레그램 봇의 메시지 수신 및 응답을 처리하는 서비스 클래스입니다.
@@ -24,7 +29,29 @@ class TelegramService:
         # ADK 실행을 위한 Runner 초기화
         self.runner = InMemoryRunner(agent=pipeline)
         self.runner.auto_create_session = True
+        # 일일 분석 횟수 추적: {chat_id: {"date": "2026-03-06", "count": 2}}
+        self._usage: dict[int, dict] = defaultdict(lambda: {"date": "", "count": 0})
         logger.info("TelegramService가 성공적으로 초기화되었습니다.")
+
+    def _check_rate_limit(self, chat_id: int) -> bool:
+        """일일 분석 횟수를 확인합니다. True면 허용, False면 초과."""
+        today = date.today().isoformat()
+        usage = self._usage[chat_id]
+        if usage["date"] != today:
+            usage["date"] = today
+            usage["count"] = 0
+        return usage["count"] < DAILY_ANALYSIS_LIMIT
+
+    def _increment_usage(self, chat_id: int):
+        """분석 횟수를 1 증가시킵니다."""
+        today = date.today().isoformat()
+        usage = self._usage[chat_id]
+        if usage["date"] != today:
+            usage["date"] = today
+            usage["count"] = 0
+        usage["count"] += 1
+        remaining = DAILY_ANALYSIS_LIMIT - usage["count"]
+        logger.info(f"[RateLimit] chat_id={chat_id}: {usage['count']}/{DAILY_ANALYSIS_LIMIT} (남은 횟수: {remaining})")
 
     async def send_text_message(self, chat_id: int, text: str) -> int | None:
         """사용자에게 텍스트 메시지를 전송하고 message_id를 반환합니다."""
@@ -204,6 +231,19 @@ class TelegramService:
             return f"{s}지만,"
         return ""
 
+    async def handle_text_message(self, update: Update):
+        """텍스트 메시지를 수신하여 안내 메시지를 전송합니다."""
+        if not update.message or not update.message.text:
+            return
+
+        chat_id = update.message.chat.id
+        logger.info(f"[Telegram] 텍스트 수신 (chat_id: {chat_id}): {update.message.text[:50]}")
+
+        await self.send_text_message(
+            chat_id,
+            "📸 정산서 이미지를 보내주세요!\n사진으로 찍어서 보내주시면 AI가 자동으로 분석해드려요.",
+        )
+
     async def handle_photo_message(self, update: Update):
         """이미지 메시지를 수신하여 분석 파이프라인을 실행합니다."""
         if not update.message or not update.message.photo:
@@ -211,6 +251,18 @@ class TelegramService:
 
         start_time = time.perf_counter()
         chat_id = update.message.chat.id
+
+        # 레이트 리밋 체크
+        if not self._check_rate_limit(chat_id):
+            logger.info(f"[RateLimit] chat_id={chat_id}: 일일 한도 초과")
+            await self.send_text_message(
+                chat_id,
+                "📊 오늘 무료 분석 3회를 모두 사용했어요.\n\n"
+                "더 자세한 분석과 무제한 이용은 SyncWatt에서!\n"
+                "👉 syncwatt.com/signup",
+            )
+            return
+
         # 가장 높은 해상도의 사진 선택
         best_photo = update.message.photo[-1]
         file_id = best_photo.file_id
@@ -288,6 +340,7 @@ class TelegramService:
                 response_text = self._build_response_message(analysis)
 
                 await self.send_text_message(chat_id, response_text)
+                self._increment_usage(chat_id)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
