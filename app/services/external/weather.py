@@ -61,3 +61,61 @@ class NasaPowerProvider:
             longitude=longitude,
             source="nasa_power",
         )
+
+
+class CachedWeatherService:
+    """DB 캐시 + Provider 조합. DataFetcherAgent는 이 클래스만 사용."""
+
+    def __init__(self, provider: WeatherProvider | None = None):
+        self._provider = provider or NasaPowerProvider()
+
+    async def get_monthly_irradiance(
+        self, year: int, month: int, latitude: float, longitude: float
+    ) -> IrradianceData:
+        from sqlmodel import Session, select
+
+        from app.db.session import engine
+        from app.models.irradiance import Irradiance
+
+        lat_r = round(latitude, 2)
+        lon_r = round(longitude, 2)
+        ym = f"{year}-{month:02d}"
+
+        # 1) DB 캐시 조회
+        with Session(engine) as session:
+            stmt = select(Irradiance).where(
+                Irradiance.year_month == ym,
+                Irradiance.latitude == lat_r,
+                Irradiance.longitude == lon_r,
+            )
+            cached = session.exec(stmt).first()
+            if cached:
+                logger.info(f"[Weather] Cache hit: {ym} ({lat_r},{lon_r}) = {cached.avg_irradiance}")
+                return IrradianceData(
+                    year=year, month=month,
+                    avg_irradiance=cached.avg_irradiance,
+                    latitude=lat_r, longitude=lon_r,
+                    source=cached.source,
+                )
+
+        # 2) Provider에서 가져오기
+        result = await self._provider.get_monthly_irradiance(year, month, lat_r, lon_r)
+
+        # 3) DB에 캐시 저장
+        with Session(engine) as session:
+            record = Irradiance(
+                year_month=ym,
+                latitude=lat_r,
+                longitude=lon_r,
+                avg_irradiance=result.avg_irradiance,
+                source=result.source,
+            )
+            session.add(record)
+            session.commit()
+            logger.info(f"[Weather] Cached: {ym} ({lat_r},{lon_r}) = {result.avg_irradiance}")
+
+        return result
+
+
+# 모듈 레벨 인스턴스 (DataFetcherAgent에서 import)
+weather_service = CachedWeatherService()

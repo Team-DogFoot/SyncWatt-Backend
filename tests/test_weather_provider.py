@@ -136,3 +136,74 @@ def test_geocoding_unknown_address_returns_default():
     lat, lon = get_coordinates("알 수 없는 주소")
     lat2, lon2 = get_coordinates(None)
     assert lat == lat2 and lon == lon2
+
+
+@pytest.fixture
+def mock_db_session():
+    """DB Session과 engine을 mock하여 psycopg2 의존성 없이 테스트."""
+    import sys
+
+    mock_engine = MagicMock()
+    mock_session_module = MagicMock()
+    mock_session_module.engine = mock_engine
+
+    # app.db.session 모듈을 mock으로 대체
+    original = sys.modules.get("app.db.session")
+    sys.modules["app.db.session"] = mock_session_module
+    yield mock_engine
+    if original is not None:
+        sys.modules["app.db.session"] = original
+    else:
+        sys.modules.pop("app.db.session", None)
+
+
+@pytest.mark.asyncio
+async def test_cached_service_calls_provider_on_miss(mock_db_session):
+    """캐시 미스 시 Provider를 호출하고 결과를 반환한다."""
+    from app.services.external.weather import CachedWeatherService
+
+    mock_provider = AsyncMock()
+    mock_provider.get_monthly_irradiance.return_value = IrradianceData(
+        year=2024, month=1, avg_irradiance=2.25,
+        latitude=37.57, longitude=126.98, source="nasa_power",
+    )
+
+    service = CachedWeatherService(provider=mock_provider)
+
+    # DB 조회를 빈 결과로 mock
+    with patch("sqlmodel.Session") as MockSession:
+        mock_session = MagicMock()
+        mock_session.exec.return_value.first.return_value = None
+        MockSession.return_value.__enter__ = MagicMock(return_value=mock_session)
+        MockSession.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = await service.get_monthly_irradiance(2024, 1, 37.57, 126.98)
+
+    assert result.avg_irradiance == 2.25
+    mock_provider.get_monthly_irradiance.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_cached_service_returns_cache_on_hit(mock_db_session):
+    """캐시 히트 시 Provider를 호출하지 않는다."""
+    from app.services.external.weather import CachedWeatherService
+    from app.models.irradiance import Irradiance
+
+    mock_provider = AsyncMock()
+    cached_record = Irradiance(
+        year_month="2024-01", latitude=37.57, longitude=126.98,
+        avg_irradiance=2.25, source="nasa_power",
+    )
+
+    service = CachedWeatherService(provider=mock_provider)
+
+    with patch("sqlmodel.Session") as MockSession:
+        mock_session = MagicMock()
+        mock_session.exec.return_value.first.return_value = cached_record
+        MockSession.return_value.__enter__ = MagicMock(return_value=mock_session)
+        MockSession.return_value.__exit__ = MagicMock(return_value=False)
+
+        result = await service.get_monthly_irradiance(2024, 1, 37.57, 126.98)
+
+    assert result.avg_irradiance == 2.25
+    mock_provider.get_monthly_irradiance.assert_not_called()
