@@ -119,11 +119,19 @@ class TelegramService:
         else:
             verdict = f"→ 한전 고정단가 계약이 이번달 기준 *{loss_abs}원* 유리했어요."
 
-        # ── 원인 ──
+        # ── 원인 + 이용률 맥락 ──
+        utilization_note = ""
+        if analysis.utilization_pct is not None:
+            u = analysis.utilization_pct
+            if u < 10:
+                utilization_note = f" 이용률 {u}%는 평균(12~16%) 대비 낮은 편이에요."
+            elif u > 16:
+                utilization_note = f" 이용률 {u}%로 평균(12~16%) 이상의 좋은 성과예요."
+
         if loss_val > 0:
-            cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
+            cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}{utilization_note}"
         else:
-            cause_section = f"💡 *참고*\n이번달 {TelegramService._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요."
+            cause_section = f"💡 *참고*\n이번달 {TelegramService._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요.{utilization_note}"
 
         # ── SMP 맥락 ──
         smp_section = ""
@@ -168,6 +176,7 @@ class TelegramService:
     def _simplify_cause(one_line: str) -> str:
         """'주요 원인은 ... 때문이에요' → '일조량이 ... 낮았지만,' 형태로 변환합니다."""
         s = one_line.replace("주요 원인은 ", "").replace("이번달 ", "")
+        s = s.replace("기 때문이에요.", "").replace("기 때문이에요", "")
         s = s.replace("때문이에요.", "").replace("때문이에요", "")
         s = s.strip()
         if s:
