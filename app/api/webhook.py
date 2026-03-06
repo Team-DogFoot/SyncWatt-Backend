@@ -13,14 +13,14 @@ async def telegram_webhook(
     background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: str | None = Header(None)
 ):
-    try:
-        # 보안: 시크릿 토큰 검증 로그 (토큰 자체는 절대 찍지 않음)
-        if settings.WEBHOOK_SECRET_TOKEN:
-            if x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET_TOKEN:
-                logger.warning(f"[Webhook] Unauthorized request: Invalid secret token (Update ID: {update.update_id})")
-                raise HTTPException(status_code=403, detail="Invalid secret token")
-            logger.debug(f"[Webhook] Secret token verified for update_id: {update.update_id}")
+    # 보안: 시크릿 토큰 검증 로그 (토큰 자체는 절대 찍지 않음)
+    if settings.WEBHOOK_SECRET_TOKEN:
+        if x_telegram_bot_api_secret_token != settings.WEBHOOK_SECRET_TOKEN:
+            logger.warning(f"[Webhook] Unauthorized request: Invalid secret token (Update ID: {update.update_id})")
+            raise HTTPException(status_code=403, detail="Invalid secret token")
+        logger.debug(f"[Webhook] Secret token verified for update_id: {update.update_id}")
 
+    try:
         # 메시지 기본 정보 로깅 (안전한 필드 추출)
         chat_id = "N/A"
         username = "unknown"
