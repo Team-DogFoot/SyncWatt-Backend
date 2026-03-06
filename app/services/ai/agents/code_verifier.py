@@ -19,7 +19,7 @@ class CodeVerifierAgent(BaseAgent):
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        logger.info(f"[{self.name}] 코드 기반 데이터 검증 시작")
+        logger.info(f"[{self.name}] Starting code-based data verification")
 
         ocr_data_dict = ctx.session.state.get("settlement_data")
         visual_data_dict = ctx.session.state.get("visual_data")
@@ -88,7 +88,7 @@ class CodeVerifierAgent(BaseAgent):
                 self._merge_auxiliary_fields(final_choice, ocr, visual)
 
             final_choice.selection_reason = reason
-            logger.info(f"[{self.name}] 최종 선택: {final_choice.model_dump()}, 사유: {reason}")
+            logger.info(f"[{self.name}] Final selection: {final_choice.model_dump()}, reason: {reason}")
             
             yield create_text_event(
                 self.name,
@@ -96,11 +96,11 @@ class CodeVerifierAgent(BaseAgent):
                 state_delta={"settlement_data": final_choice}
             )
         else:
-            logger.error(f"[{self.name}] 검증 실패: 유효한 데이터를 찾을 수 없습니다.")
+            logger.error(f"[{self.name}] Verification failed: no valid data found")
             yield create_text_event(self.name, "데이터 검증 중 오류가 발생했습니다. 유효한 정보를 찾을 수 없습니다.")
 
         duration = time.perf_counter() - start_t
-        logger.info(f"[{self.name}] 검증 완료 (소요시간: {duration:.2f}초)")
+        logger.info(f"[{self.name}] Verification complete ({duration:.2f}s)")
 
     def _to_model(self, data):
         if not data:
@@ -139,7 +139,7 @@ class CodeVerifierAgent(BaseAgent):
         if ocr_cap > 0 or vis_cap > 0:
             best_cap = max(ocr_cap, vis_cap) if max(ocr_cap, vis_cap) >= 1 else None
             if best_cap != final.capacity_kw:
-                logger.info(f"[{self.name}] capacity_kw 보정: {final.capacity_kw} -> {best_cap}")
+                logger.info(f"[{self.name}] capacity_kw corrected: {final.capacity_kw} -> {best_cap}")
                 final.capacity_kw = best_cap
 
         # address: 없으면 다른 쪽에서 가져오기

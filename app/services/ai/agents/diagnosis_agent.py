@@ -21,18 +21,18 @@ class DiagnosisCalculatorAgent(BaseAgent):
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        logger.info(f"[{self.name}] 진단 계산 시작")
+        logger.info(f"[{self.name}] Starting diagnosis calculation")
 
         settlement_data = ctx.session.state.get("settlement_data")
         market_data = ctx.session.state.get("market_data")
 
         if not settlement_data:
-            logger.error(f"[{self.name}] settlement_data 누락")
+            logger.error(f"[{self.name}] settlement_data missing")
             yield create_text_event(self.name, "정산 데이터가 없어 진단 불가.")
             return
 
         if not market_data or market_data.get("error_smp") or market_data.get("curr_smp") is None:
-            logger.warning(f"[{self.name}] 필수 시장 데이터 누락 (error_smp={market_data.get('error_smp') if market_data else 'N/A'})")
+            logger.warning(f"[{self.name}] Required market data missing (error_smp={market_data.get('error_smp') if market_data else 'N/A'})")
             error_result = DiagnosisResult(
                 year_month=settlement_data.year_month,
                 actual_revenue_krw=settlement_data.total_revenue_krw,
@@ -94,20 +94,20 @@ class DiagnosisAgent(LlmAgent):
             """,
             output_key="diagnosis_message",
         )
-        logger.info(f"[{self.name}] 에이전트가 초기화되었습니다.")
+        logger.info(f"[{self.name}] Agent initialized")
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        logger.info(f"[{self.name}] 메시지 생성 시작")
+        logger.info(f"[{self.name}] Starting message generation")
 
         calc = ctx.session.state.get("diagnosis_calc")
         if not calc:
-            logger.error(f"[{self.name}] diagnosis_calc이 세션에 없습니다.")
+            logger.error(f"[{self.name}] diagnosis_calc not found in session")
             return
 
         # analysis_result가 이미 있으면 (에러 케이스) 스킵
         if ctx.session.state.get("analysis_result"):
-            logger.info(f"[{self.name}] analysis_result가 이미 존재. 메시지 생성 스킵.")
+            logger.info(f"[{self.name}] analysis_result already exists. Skipping message generation.")
             return
 
         settlement_data = ctx.session.state.get("settlement_data")
@@ -118,7 +118,7 @@ class DiagnosisAgent(LlmAgent):
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 메시지 생성 완료 (소요시간: {duration:.2f}초)")
+                logger.info(f"[{self.name}] Message generation complete ({duration:.2f}s)")
 
                 # LLM 생성 메시지 추출
                 diagnosis_msg = ctx.session.state.get("diagnosis_message")

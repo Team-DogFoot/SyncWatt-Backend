@@ -39,28 +39,28 @@ class OcrRefinerAgent(LlmAgent):
             output_schema=SettlementOcrData,
             output_key="settlement_data"
         )
-        logger.info(f"[{self.name}] 에이전트가 초기화되었습니다.")
+        logger.info(f"[{self.name}] Agent initialized")
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
         raw_text = ctx.session.state.get("raw_text", "")
-        logger.info(f"[{self.name}] OCR 데이터 정제 시작 (입력 텍스트 길이: {len(raw_text)})")
+        logger.info(f"[{self.name}] Starting OCR data refinement (input text length: {len(raw_text)})")
 
         if not raw_text:
-            logger.error(f"[{self.name}] raw_text가 비어있습니다. LLM 정제 불가.")
+            logger.error(f"[{self.name}] raw_text is empty. LLM refinement not possible.")
             return
 
         # ADK LlmAgent는 instruction의 {{raw_text}} 를 session.state["raw_text"]로 자동 치환
-        logger.info(f"[{self.name}] LLM에 전달될 raw_text 앞 200자: {raw_text[:200]}")
+        logger.info(f"[{self.name}] raw_text first 200 chars for LLM: {raw_text[:200]}")
 
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 데이터 정제 프로세스 완료 (소요시간: {duration:.2f}초)")
+                logger.info(f"[{self.name}] Data refinement process complete ({duration:.2f}s)")
 
                 refined_data = event.actions.state_delta.get("settlement_data")
                 if refined_data:
                     logger.info(f"[{self.name}] [Result]: {refined_data}")
                 else:
-                    logger.warning(f"[{self.name}] state_delta에 settlement_data 없음 (runner 적용 후 확인 필요)")
+                    logger.warning(f"[{self.name}] settlement_data not in state_delta (check after runner applies)")
             yield event

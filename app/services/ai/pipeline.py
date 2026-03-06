@@ -17,7 +17,7 @@ def create_mvp_analysis_pipeline() -> SequentialAgent:
     4. DiagnosisCalculatorAgent: Python 로직으로 진단 계산
     5. DiagnosisAgent: 최종 한 줄 메시지 생성 (analysis_result)
     """
-    logger.info("병렬 검증 MVP 분석 파이프라인 조립 시작")
+    logger.info("Assembling parallel verification MVP analysis pipeline")
 
     # 1. 병렬 실행 경로 레이어 정의
     ocr_path = SequentialAgent(
@@ -49,7 +49,7 @@ def create_mvp_analysis_pipeline() -> SequentialAgent:
         ]
     )
 
-    logger.info("병렬 검증 MVP 분석 파이프라인 조립 완료")
+    logger.info("Parallel verification MVP analysis pipeline assembly complete")
     return pipeline
 
 # 서비스 전역에서 사용할 파이프라인 인스턴스

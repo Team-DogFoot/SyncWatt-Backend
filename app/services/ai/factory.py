@@ -20,7 +20,7 @@ class AgentFactory:
         """인스턴스가 없으면 생성하고, 있으면 캐시된 인스턴스를 반환합니다."""
         class_name = agent_class.__name__
         if class_name not in cls._instances:
-            logger.info(f"[AgentFactory] 새로운 {class_name} 인스턴스를 생성합니다.")
+            logger.info(f"[AgentFactory] Creating new {class_name} instance")
             cls._instances[class_name] = agent_class()
         return cls._instances[class_name]
 

@@ -64,7 +64,7 @@ class TelegramService:
             return
 
         chat_id = update.message.chat.id
-        logger.info(f"[Telegram] 텍스트 수신 (chat_id: {chat_id}): {update.message.text[:50]}")
+        logger.info(f"[Telegram] Text received (chat_id: {chat_id}): {update.message.text[:50]}")
 
         await self.client.send_message(
             chat_id,
@@ -96,7 +96,7 @@ class TelegramService:
         user_id_str = str(update.message.from_user.id) if update.message.from_user else str(chat_id)
         session_id = f"tg_{chat_id}_{update.message.message_id}"
 
-        logger.info(f"[Telegram] 새 이미지 수신 (사용자: {user_id_str}, 세션: {session_id})")
+        logger.info(f"[Telegram] New image received (user: {user_id_str}, session: {session_id})")
 
         try:
             # 1. 초기 접수 알림 (분석 완료 후 삭제)
@@ -105,13 +105,13 @@ class TelegramService:
             # 2. 이미지 다운로드
             image_bytes = await self.client.download_file(file_id)
             
-            logger.info(f"[Telegram] 이미지 다운로드 완료 (크기: {len(image_bytes)} bytes)")
+            logger.info(f"[Telegram] Image download complete (size: {len(image_bytes)} bytes)")
 
             # 2-1. S3에 원본 이미지 백그라운드 저장
             self._save_image_to_s3(image_bytes, chat_id, session_id)
 
             # 3. ADK 파이프라인 실행 (세션 state 초기화 포함)
-            logger.info("[Pipeline] 분석 파이프라인 가동 시작")
+            logger.info("[Pipeline] Analysis pipeline starting")
             initial_state = {
                 "image_bytes": image_bytes,
                 "raw_text": None,
@@ -155,13 +155,13 @@ class TelegramService:
                 try:
                     self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
                 except Exception as e:
-                    logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
+                    logger.error(f"[DB] Save failed (message delivery continues): {e}")
 
                 response_text = build_response_message(analysis)
 
                 await self.client.send_message(chat_id, response_text)
                 self.rate_limiter.increment(chat_id)
-                logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
+                logger.info(f"[Telegram] Analysis result sent (session: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
                 # 상세 리포트 사전예약 버튼
@@ -174,18 +174,18 @@ class TelegramService:
                     ]],
                 )
             else:
-                logger.warning(f"[Telegram] 분석 결과 누락 (세션: {session_id})")
+                logger.warning(f"[Telegram] Analysis result missing (session: {session_id})")
                 await self.client.send_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"[Telegram] API 통신 에러: {str(e)}")
+            logger.error(f"[Telegram] API communication error: {str(e)}")
             await self.client.send_message(chat_id, "⚠️ 텔레그램 서버와 통신 중 문제가 발생했습니다. 잠시 후 다시 시도해주세요.")
         except Exception as e:
-            logger.error(f"[Telegram] 치명적 에러 발생: {str(e)}", exc_info=True)
+            logger.error(f"[Telegram] Fatal error occurred: {str(e)}", exc_info=True)
             await self.client.send_message(chat_id, "⚠️ 분석 중 예상치 못한 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
         finally:
             duration = time.perf_counter() - start_time
-            logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
+            logger.info(f"[Telegram] Total processing time: {duration:.2f}s")
 
     async def handle_callback_query(self, callback_query):
         """InlineKeyboard 버튼 클릭(callback_query)을 처리합니다."""
@@ -214,7 +214,7 @@ class TelegramService:
                     "알겠어요. 나중에 언제든 문의해 주세요!"
                 )
         except Exception as e:
-            logger.error(f"[Telegram] Callback 처리 실패: {str(e)}", exc_info=True)
+            logger.error(f"[Telegram] Callback processing failed: {str(e)}", exc_info=True)
 
     def _save_pre_registration(self, chat_id: int):
         """사전예약 정보를 DB에 저장합니다."""
@@ -232,7 +232,7 @@ class TelegramService:
                 session.commit()
                 logger.info(f"[DB] PreRegistration saved for chat_id: {chat_id}")
         except Exception as e:
-            logger.error(f"[DB] PreRegistration 저장 실패: {str(e)}")
+            logger.error(f"[DB] PreRegistration save failed: {str(e)}")
 
     @staticmethod
     def _save_image_to_s3(image_bytes: bytes, chat_id: int, session_id: str):

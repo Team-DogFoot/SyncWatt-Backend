@@ -12,7 +12,7 @@ def _inject_image_before_model(callback_context, llm_request):
     """before_model_callback: 세션 state의 image_bytes를 LLM 요청에 이미지 Part로 주입"""
     image_bytes = callback_context.state.get("image_bytes")
     if not image_bytes:
-        logger.error("[direct_vision] before_model_callback: image_bytes가 세션에 없습니다.")
+        logger.error("[direct_vision] before_model_callback: image_bytes not found in session")
         return None
 
     image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
@@ -20,14 +20,14 @@ def _inject_image_before_model(callback_context, llm_request):
     for content in reversed(llm_request.contents):
         if content.role == "user":
             content.parts.append(image_part)
-            logger.info(f"[direct_vision] 이미지 Part를 user content에 주입 완료 ({len(image_bytes)} bytes)")
+            logger.info(f"[direct_vision] Image Part injected into user content ({len(image_bytes)} bytes)")
             break
     else:
         # user content가 없으면 새로 생성
         llm_request.contents.append(
             types.Content(role="user", parts=[image_part])
         )
-        logger.info(f"[direct_vision] 새 user content로 이미지 Part 주입 완료 ({len(image_bytes)} bytes)")
+        logger.info(f"[direct_vision] Image Part injected as new user content ({len(image_bytes)} bytes)")
 
     return None  # None을 반환하면 LLM 호출 진행
 
@@ -56,25 +56,25 @@ class DirectVisionAgent(LlmAgent):
             output_key="visual_data",
             before_model_callback=_inject_image_before_model,
         )
-        logger.info(f"[{self.name}] 에이전트가 초기화되었습니다.")
+        logger.info(f"[{self.name}] Agent initialized")
 
     async def _run_async_impl(self, ctx):
         start_t = time.perf_counter()
-        logger.info(f"[{self.name}] 이미지 직접 시각 분석 시작")
+        logger.info(f"[{self.name}] Starting direct image visual analysis")
 
         image_bytes = ctx.session.state.get("image_bytes")
         if not image_bytes:
-            logger.error(f"[{self.name}] 세션에 image_bytes가 없습니다. 분석 불가.")
+            logger.error(f"[{self.name}] image_bytes not found in session. Analysis not possible.")
             return
 
         async for event in super()._run_async_impl(ctx):
             if not event.partial:
                 duration = time.perf_counter() - start_t
-                logger.info(f"[{self.name}] 시각 분석 프로세스 완료 (소요시간: {duration:.2f}초)")
+                logger.info(f"[{self.name}] Visual analysis process complete ({duration:.2f}s)")
 
                 visual_data = event.actions.state_delta.get("visual_data")
                 if visual_data:
                     logger.info(f"[{self.name}] [Result]: {visual_data}")
                 else:
-                    logger.warning(f"[{self.name}] state_delta에 visual_data 없음 (runner 적용 후 확인 필요)")
+                    logger.warning(f"[{self.name}] visual_data not in state_delta (check after runner applies)")
             yield event
