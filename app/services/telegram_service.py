@@ -1,13 +1,12 @@
 import httpx
 import logging
 import time
-from collections import defaultdict
-from datetime import date
-from app.core.config import settings
 from app.schemas.telegram import Update
 from app.services.ai.pipeline import pipeline
 from app.schemas.ai.diagnosis import DiagnosisResult
 from app.services.telegram_client import TelegramClient
+from app.services.message_formatter import build_response_message
+from app.services.rate_limiter import RateLimiter
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 from sqlmodel import Session
@@ -16,8 +15,6 @@ from app.models.settlement import MonthlySettlement
 
 logger = logging.getLogger(__name__)
 
-DAILY_ANALYSIS_LIMIT = 3
-
 
 class TelegramService:
     """
@@ -25,32 +22,11 @@ class TelegramService:
     """
     def __init__(self):
         self.client = TelegramClient()
+        self.rate_limiter = RateLimiter()
         # ADK 실행을 위한 Runner 초기화
         self.runner = InMemoryRunner(agent=pipeline)
         self.runner.auto_create_session = True
-        # 일일 분석 횟수 추적: {chat_id: {"date": "2026-03-06", "count": 2}}
-        self._usage: dict[int, dict] = defaultdict(lambda: {"date": "", "count": 0})
-        logger.info("TelegramService가 성공적으로 초기화되었습니다.")
-
-    def _check_rate_limit(self, chat_id: int) -> bool:
-        """일일 분석 횟수를 확인합니다. True면 허용, False면 초과."""
-        today = date.today().isoformat()
-        usage = self._usage[chat_id]
-        if usage["date"] != today:
-            usage["date"] = today
-            usage["count"] = 0
-        return usage["count"] < DAILY_ANALYSIS_LIMIT
-
-    def _increment_usage(self, chat_id: int):
-        """분석 횟수를 1 증가시킵니다."""
-        today = date.today().isoformat()
-        usage = self._usage[chat_id]
-        if usage["date"] != today:
-            usage["date"] = today
-            usage["count"] = 0
-        usage["count"] += 1
-        remaining = DAILY_ANALYSIS_LIMIT - usage["count"]
-        logger.info(f"[RateLimit] chat_id={chat_id}: {usage['count']}/{DAILY_ANALYSIS_LIMIT} (남은 횟수: {remaining})")
+        logger.info("TelegramService initialized.")
 
     def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data, market_data: dict):
         """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
@@ -82,108 +58,6 @@ class TelegramService:
         except Exception as e:
             logger.error(f"[DB] Failed to save settlement: {str(e)}")
 
-    @staticmethod
-    def _build_response_message(analysis: DiagnosisResult) -> str:
-        """DiagnosisResult를 텔레그램 최종 메시지로 변환합니다."""
-        f = format  # shorthand
-        loss_val = int(analysis.opportunity_loss_krw)
-        loss_abs = f(abs(loss_val), ",")
-        optimal = f(int(analysis.optimal_revenue_krw), ",")
-        actual = f(int(analysis.actual_revenue_krw), ",")
-        gen = f(int(analysis.generation_kwh), ",")
-        recovery = int(analysis.potential_recovery_krw) if analysis.potential_recovery_krw else 0
-
-        # ── 헤더 ──
-        ym = analysis.year_month
-        parts = ym.split("-")
-        header = f"📝 *{parts[0]}년 {int(parts[1])}월 정산 분석*" if len(parts) == 2 else f"📝 *{ym} 정산 분석*"
-
-        # ── 이번 달 요약 ──
-        summary_lines = [f"• 발전량: {gen} kWh"]
-
-        if analysis.capacity_kw and analysis.utilization_pct is not None:
-            cap = f(int(analysis.capacity_kw), ",")
-            summary_lines.append(f"• 설비용량 {cap}kW 기준 이용률 {analysis.utilization_pct}%")
-
-        unit_str = f"{analysis.unit_price:.1f}" if analysis.unit_price else "?"
-        summary_lines.append(f"• 실제 수령: {actual}원 (단가 {unit_str}원/kWh)")
-
-        smp_str = f"{analysis.curr_smp:.1f}" if analysis.curr_smp else "?"
-        summary_lines.append(f"• 전력시장 직접 판매 시(KPX): {optimal}원 (시장가(SMP) 평균 {smp_str}원/kWh)")
-
-        summary = "\n".join(summary_lines)
-
-        # ── 손익 판정 ──
-        if loss_val > 0:
-            verdict = f"→ 이번 달은 약 *{loss_abs}원*의 기회손실이 있었어요."
-        elif loss_val == 0:
-            verdict = "→ 이번 달은 전력시장 직접 판매 시와 동일해요."
-        else:
-            verdict = f"→ 한전 고정단가 계약이 이번달 기준 *{loss_abs}원* 유리했어요."
-
-        # ── 원인 + 이용률 맥락 ──
-        utilization_note = ""
-        if analysis.utilization_pct is not None:
-            u = analysis.utilization_pct
-            if u < 10:
-                utilization_note = f" 이용률 {u}%는 평균(12~16%) 대비 낮은 편이에요."
-            elif u > 16:
-                utilization_note = f" 이용률 {u}%로 평균(12~16%) 이상의 좋은 성과예요."
-
-        if loss_val > 0:
-            cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}{utilization_note}"
-        else:
-            cause_section = f"💡 *참고*\n이번달 {TelegramService._simplify_cause(analysis.one_line_message)} 한전 고정단가가 시장가(SMP)보다 높아 오히려 유리했어요.{utilization_note}"
-
-        # ── SMP 맥락 ──
-        smp_section = ""
-        if analysis.smp_context_message:
-            smp_section = f"\n\n📈 *알아두시면 좋아요*\n{analysis.smp_context_message}"
-
-        # ── 회수 가능 (손실 양수일 때만) ──
-        recovery_section = ""
-        if loss_val > 0 and recovery > 0:
-            recovery_fmt = f(recovery, ",")
-            recovery_section = f"\n\n🔧 이 중 약 *{recovery_fmt}원*은 입찰 예측값 최적화로 회수 가능해요."
-
-        # ── 가입 CTA ──
-        cta = (
-            "\n\n✅ *가입하면 받을 수 있어요*\n"
-            "• 매일 아침 최적 입찰가 추천\n"
-            "• 월간 발전소 성적표\n"
-            "• 연간 누적 기회비용 분석"
-        )
-
-        # ── 위치 안내 ──
-        location = ""
-        if not analysis.address_used:
-            location = "\n\n📍 현재 전국 평균 일조량으로 분석했어요. 위치를 등록하면 우리 발전소 지역 기반 정밀 분석이 가능해요."
-
-        # ── 조립 ──
-        msg = (
-            f"{header}\n\n"
-            f"📊 *이번 달 요약*\n"
-            f"{summary}\n"
-            f"{verdict}\n\n"
-            f"{cause_section}"
-            f"{smp_section}"
-            f"{recovery_section}"
-            f"{cta}"
-            f"{location}"
-        )
-        return msg
-
-    @staticmethod
-    def _simplify_cause(one_line: str) -> str:
-        """'주요 원인은 ... 때문이에요' → '일조량이 ... 낮았지만,' 형태로 변환합니다."""
-        s = one_line.replace("주요 원인은 ", "").replace("이번달 ", "")
-        s = s.replace("기 때문이에요.", "").replace("기 때문이에요", "")
-        s = s.replace("때문이에요.", "").replace("때문이에요", "")
-        s = s.strip()
-        if s:
-            return f"{s}지만,"
-        return ""
-
     async def handle_text_message(self, update: Update):
         """텍스트 메시지를 수신하여 안내 메시지를 전송합니다."""
         if not update.message or not update.message.text:
@@ -206,8 +80,8 @@ class TelegramService:
         chat_id = update.message.chat.id
 
         # 레이트 리밋 체크
-        if not self._check_rate_limit(chat_id):
-            logger.info(f"[RateLimit] chat_id={chat_id}: 일일 한도 초과")
+        if not self.rate_limiter.check(chat_id):
+            logger.info(f"[RateLimit] chat_id={chat_id}: daily limit exceeded")
             await self.client.send_message(
                 chat_id,
                 "📊 오늘 무료 분석 3회를 모두 사용했어요.\n\n"
@@ -283,10 +157,10 @@ class TelegramService:
                 except Exception as e:
                     logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
 
-                response_text = self._build_response_message(analysis)
+                response_text = build_response_message(analysis)
 
                 await self.client.send_message(chat_id, response_text)
-                self._increment_usage(chat_id)
+                self.rate_limiter.increment(chat_id)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
 
