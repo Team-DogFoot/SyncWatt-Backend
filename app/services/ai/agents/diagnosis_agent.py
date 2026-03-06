@@ -143,12 +143,18 @@ class DiagnosisAgent(LlmAgent):
                 }
                 result = DiagnosisResult(
                     year_month=settlement_data.year_month if settlement_data else "UNKNOWN",
+                    generation_kwh=calc.get("generation_kwh", 0),
+                    capacity_kw=calc.get("capacity_kw"),
+                    utilization_pct=calc.get("utilization_pct"),
+                    unit_price=calc.get("unit_price", 0),
+                    curr_smp=calc.get("curr_smp", 0),
                     actual_revenue_krw=calc["actual_revenue"],
                     optimal_revenue_krw=calc["optimal_revenue"],
                     opportunity_loss_krw=calc["loss"],
                     potential_recovery_krw=calc["improvement_potential"],
                     loss_cause=cause_map.get(calc["cause"], LossCause.UNKNOWN),
                     one_line_message=one_line,
+                    smp_context_message=calc.get("smp_context", ""),
                     address_used=calc["address_used"],
                 )
 

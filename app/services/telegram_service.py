@@ -66,6 +66,87 @@ class TelegramService:
         except Exception as e:
             logger.error(f"[DB] Failed to save settlement: {str(e)}")
 
+    @staticmethod
+    def _build_response_message(analysis: DiagnosisResult) -> str:
+        """DiagnosisResult를 텔레그램 최종 메시지로 변환합니다."""
+        f = format  # shorthand
+        loss_val = int(analysis.opportunity_loss_krw)
+        loss_abs = f(abs(loss_val), ",")
+        optimal = f(int(analysis.optimal_revenue_krw), ",")
+        actual = f(int(analysis.actual_revenue_krw), ",")
+        gen = f(int(analysis.generation_kwh), ",")
+        recovery = int(analysis.potential_recovery_krw) if analysis.potential_recovery_krw else 0
+
+        # ── 헤더 ──
+        ym = analysis.year_month
+        parts = ym.split("-")
+        header = f"📝 *{parts[0]}년 {int(parts[1])}월 정산 분석*" if len(parts) == 2 else f"📝 *{ym} 정산 분석*"
+
+        # ── 이번 달 요약 ──
+        summary_lines = [f"• 발전량: {gen} kWh"]
+
+        if analysis.capacity_kw and analysis.utilization_pct is not None:
+            cap = f(int(analysis.capacity_kw), ",")
+            summary_lines.append(f"• 설비용량 {cap}kW 기준 이용률 {analysis.utilization_pct}%")
+
+        unit_str = f"{analysis.unit_price:.1f}" if analysis.unit_price else "?"
+        summary_lines.append(f"• 실제 수령: {actual}원 (단가 {unit_str}원/kWh)")
+
+        smp_str = f"{analysis.curr_smp:.1f}" if analysis.curr_smp else "?"
+        summary_lines.append(f"• KPX 기대수익: {optimal}원 (SMP 평균 {smp_str}원/kWh)")
+
+        summary = "\n".join(summary_lines)
+
+        # ── 손익 판정 ──
+        if loss_val > 0:
+            verdict = f"→ 이번 달은 약 *{loss_abs}원*의 기회손실이 있었어요."
+        elif loss_val == 0:
+            verdict = "→ 이번 달은 KPX 기대수익과 동일해요."
+        else:
+            verdict = f"→ 현재 계약이 이번달 기준 *{loss_abs}원* 유리했어요."
+
+        # ── 원인 ──
+        cause_section = f"💡 *주요 원인*\n{analysis.one_line_message}"
+
+        # ── SMP 맥락 ──
+        smp_section = ""
+        if analysis.smp_context_message:
+            smp_section = f"\n\n📈 *알아두세요*\n{analysis.smp_context_message}"
+
+        # ── 회수 가능 (손실 양수일 때만) ──
+        recovery_section = ""
+        if loss_val > 0 and recovery > 0:
+            recovery_fmt = f(recovery, ",")
+            recovery_section = f"\n\n🔧 이 중 약 *{recovery_fmt}원*은 입찰 예측값 최적화로 회수 가능해요."
+
+        # ── 가입 CTA ──
+        cta = (
+            "\n\n✅ *가입하면 받을 수 있어요*\n"
+            "• 매일 아침 최적 입찰가 추천\n"
+            "• 월간 발전소 성적표\n"
+            "• 연간 누적 기회비용 분석"
+        )
+
+        # ── 위치 안내 ──
+        location = ""
+        if not analysis.address_used:
+            location = "\n\n📍 위치를 등록하면 지역 일조량 기반 정밀 분석이 가능해요."
+
+        # ── 조립 ──
+        msg = (
+            f"{header}\n\n"
+            f"📊 *이번 달 요약*\n"
+            f"{summary}\n"
+            f"{verdict}\n\n"
+            f"{cause_section}"
+            f"{smp_section}"
+            f"{recovery_section}"
+            f"{cta}"
+            f"{location}"
+            f"\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
+        )
+        return msg
+
     async def handle_photo_message(self, update: Update):
         """이미지 메시지를 수신하여 분석 파이프라인을 실행합니다."""
         if not update.message or not update.message.photo:
@@ -137,50 +218,13 @@ class TelegramService:
                 else:
                     analysis = DiagnosisResult.model_validate(analysis_data)
 
-                # 금액 천단위 콤마 처리
-                loss_val = int(analysis.opportunity_loss_krw)
-                loss_formatted = format(abs(loss_val), ",")
-                optimal_formatted = format(int(analysis.optimal_revenue_krw), ",")
-                actual_formatted = format(int(analysis.actual_revenue_krw), ",")
-                recovery = int(analysis.potential_recovery_krw) if analysis.potential_recovery_krw else 0
-                recovery_formatted = format(recovery, ",")
-
-                logger.info(f"[Telegram] [Final Outputs]: Loss={loss_formatted}, Optimal={optimal_formatted}, Actual={actual_formatted}, Potential={recovery_formatted}")
-
                 # DB 저장 (예외 격리)
                 try:
                     self._save_settlement_to_db(chat_id, analysis, settlement_data, market_data)
                 except Exception as e:
                     logger.error(f"[DB] 저장 실패 (메시지 발송은 계속 진행): {e}")
 
-                # 최종 응답 구성 (판단 없이 숫자만 제공)
-                if loss_val > 0:
-                    response_text = (
-                        f"📝 *지난달 손실 진단 결과*\n\n"
-                        f"이번 달은 약 {loss_formatted}원의 손실이 발생했습니다.\n"
-                        f"최적 수익 {optimal_formatted}원 - 실제 수령 {actual_formatted}원 = {loss_formatted}원\n\n"
-                        f"💡 *주요 원인*\n"
-                        f"{analysis.one_line_message}"
-                    )
-                else:
-                    response_text = (
-                        f"📝 *지난달 손실 진단 결과*\n\n"
-                        f"실제 수령 {actual_formatted}원 > KPX 기대수익 {optimal_formatted}원\n"
-                        f"현재 계약이 이번달 기준 {loss_formatted}원 유리했어요.\n\n"
-                        f"💡 *주요 원인*\n"
-                        f"{analysis.one_line_message}"
-                    )
-
-                if loss_val > 0 and recovery > 0:
-                    response_text += (
-                        f"\n\n📈 이 중 약 {recovery_formatted}원은 입찰 예측값 최적화로 회수 가능해요.\n"
-                        f"가입 후 매일 아침 입찰 추천값을 받아보세요."
-                    )
-
-                if not analysis.address_used:
-                    response_text += "\n\n📍 발전소 위치 정보가 없어서 전국 평균 일조량으로 추산했어요. 가입 후 위치를 등록하면 더 정확한 분석이 가능해요."
-
-                response_text += "\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
+                response_text = self._build_response_message(analysis)
 
                 await self.send_text_message(chat_id, response_text)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")

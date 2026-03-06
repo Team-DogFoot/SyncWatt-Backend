@@ -83,6 +83,10 @@ class CodeVerifierAgent(BaseAgent):
                     reason = f"두 결과가 다르므로 수치 오차가 더 적은 시각 분석 결과를 채택했습니다 (OCR 오차: {ocr_diff:.0f}, Visual 오차: {vis_diff:.0f})."
 
         if final_choice:
+            # 보조 필드 보정: capacity_kw가 비정상이면 다른 결과에서 가져오기
+            if ocr and visual:
+                self._merge_auxiliary_fields(final_choice, ocr, visual)
+
             final_choice.selection_reason = reason
             logger.info(f"[{self.name}] 최종 선택: {final_choice.model_dump()}, 사유: {reason}")
             
@@ -126,6 +130,23 @@ class CodeVerifierAgent(BaseAgent):
             return float('inf')
         expected_revenue = data.unit_price * data.generation_kwh
         return abs(expected_revenue - data.total_revenue_krw)
+
+    def _merge_auxiliary_fields(self, final: SettlementOcrData, ocr: SettlementOcrData, visual: SettlementOcrData):
+        """보조 필드(capacity_kw, address)를 두 결과에서 가장 합리적인 값으로 보정합니다."""
+        # capacity_kw: 1kW 미만은 비정상 (단위 오류), 더 큰 쪽 채택
+        ocr_cap = ocr.capacity_kw or 0
+        vis_cap = visual.capacity_kw or 0
+        if ocr_cap > 0 or vis_cap > 0:
+            best_cap = max(ocr_cap, vis_cap) if max(ocr_cap, vis_cap) >= 1 else None
+            if best_cap != final.capacity_kw:
+                logger.info(f"[{self.name}] capacity_kw 보정: {final.capacity_kw} -> {best_cap}")
+                final.capacity_kw = best_cap
+
+        # address: 없으면 다른 쪽에서 가져오기
+        if not final.address:
+            other = visual if final is ocr else ocr
+            if other.address:
+                final.address = other.address
 
     def _check_integrity(self, data: SettlementOcrData) -> bool:
         """
