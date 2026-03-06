@@ -7,4 +7,5 @@ class SettlementOcrData(BaseModel):
     total_revenue_krw: int = Field(description="실제 총 수령액 (원)")
     capacity_kw: float | None = Field(default=None, description="발전소 설비용량 (kW)")
     address: str | None = Field(default=None, description="발전소 주소")
+    issuer: str | None = Field(default=None, description="정산서 발행처 (예: 한국전력공사, 한수원, KPX 등)")
     selection_reason: str | None = Field(default=None, description="데이터 선택 사유 (로그용)")

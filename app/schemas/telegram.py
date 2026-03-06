@@ -26,8 +26,17 @@ class Message(BaseModel):
 
     model_config = {"populate_by_name": True}
 
+class CallbackQuery(BaseModel):
+    id: str
+    from_user: Optional[User] = Field(None, alias="from")
+    message: Optional[Message] = None
+    data: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
+
 class Update(BaseModel):
     update_id: int
     message: Optional[Message] = None
-    
+    callback_query: Optional[CallbackQuery] = None
+
     model_config = {"populate_by_name": True}

@@ -35,6 +35,9 @@ async def telegram_webhook(
         if update.message and update.message.photo:
             logger.info(f"[Webhook] Photo update detected (Photo count: {len(update.message.photo)})")
             background_tasks.add_task(telegram_service.handle_photo_message, update)
+        elif update.callback_query:
+            logger.info(f"[Webhook] Callback query detected: {update.callback_query.data}")
+            background_tasks.add_task(telegram_service.handle_callback_query, update.callback_query)
         elif update.message and update.message.text:
             logger.info(f"[Webhook] Text update detected: {update.message.text[:50]}...")
         else:

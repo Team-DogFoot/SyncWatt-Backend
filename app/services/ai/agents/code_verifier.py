@@ -148,6 +148,12 @@ class CodeVerifierAgent(BaseAgent):
             if other.address:
                 final.address = other.address
 
+        # issuer: 없으면 다른 쪽에서 가져오기
+        if not final.issuer:
+            other = visual if final is ocr else ocr
+            if other.issuer:
+                final.issuer = other.issuer
+
     def _check_integrity(self, data: SettlementOcrData) -> bool:
         """
         단가 * 발전량 ≈ 총 수령액(공급가액) 인지 확인합니다.

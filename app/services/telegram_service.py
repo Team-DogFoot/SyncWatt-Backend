@@ -1,4 +1,5 @@
 import httpx
+import json
 import logging
 import time
 from app.core.config import settings
@@ -49,6 +50,27 @@ class TelegramService:
                 logger.debug(f"[Telegram] 메시지 삭제 완료 (chat_id: {chat_id}, message_id: {message_id})")
         except Exception as e:
             logger.debug(f"[Telegram] 메시지 삭제 실패 (무시): {str(e)}")
+
+    async def send_message_with_inline_keyboard(
+        self, chat_id: int, text: str, buttons: list[list[dict]]
+    ) -> int | None:
+        """InlineKeyboardMarkup이 포함된 메시지를 전송합니다."""
+        try:
+            async with httpx.AsyncClient() as client:
+                data = {
+                    'chat_id': chat_id,
+                    'text': text,
+                    'parse_mode': 'Markdown',
+                    'reply_markup': json.dumps({"inline_keyboard": buttons}),
+                }
+                response = await client.post(f"{self.base_url}/sendMessage", data=data)
+                response.raise_for_status()
+                msg_id = response.json().get("result", {}).get("message_id")
+                logger.debug(f"[Telegram] 인라인 키보드 메시지 전송 완료 (chat_id: {chat_id})")
+                return msg_id
+        except Exception as e:
+            logger.error(f"[Telegram] 인라인 키보드 메시지 전송 실패: {str(e)}")
+            return None
 
     def _save_settlement_to_db(self, chat_id: int, analysis: DiagnosisResult, settlement_data, market_data: dict):
         """분석 결과를 MonthlySettlement 테이블에 저장합니다."""
@@ -168,7 +190,6 @@ class TelegramService:
             f"{recovery_section}"
             f"{cta}"
             f"{location}"
-            f"\n\n🔗 [상세 리포트 보기](https://syncwatt.com/report/sample)"
         )
         return msg
 
@@ -269,6 +290,16 @@ class TelegramService:
                 await self.send_text_message(chat_id, response_text)
                 logger.info(f"[Telegram] 분석 결과 전송 완료 (세션: {session_id})")
                 logger.info(f"[Final Message Sent to {chat_id}]: {response_text}")
+
+                # 상세 리포트 사전예약 버튼
+                await self.send_message_with_inline_keyboard(
+                    chat_id,
+                    "📊 *상세 리포트는 4월에 오픈 예정이에요.*\n오픈 시 알림을 받아보시겠어요?",
+                    [[
+                        {"text": "알림 받기 ✅", "callback_data": "preregister_yes"},
+                        {"text": "괜찮아요", "callback_data": "preregister_no"},
+                    ]],
+                )
             else:
                 logger.warning(f"[Telegram] 분석 결과 누락 (세션: {session_id})")
                 await self.send_text_message(chat_id, "⚠️ 이미지에서 정보를 충분히 읽어내지 못했습니다. 글자가 잘 보이게 다시 찍어서 보내주세요.")
@@ -282,5 +313,56 @@ class TelegramService:
         finally:
             duration = time.perf_counter() - start_time
             logger.info(f"[Telegram] 전체 처리 시간: {duration:.2f}초")
+
+    async def handle_callback_query(self, callback_query):
+        """InlineKeyboard 버튼 클릭(callback_query)을 처리합니다."""
+        cb_id = callback_query.id
+        data = callback_query.data
+        chat_id = callback_query.message.chat.id if callback_query.message else None
+
+        if not chat_id:
+            return
+
+        logger.info(f"[Telegram] Callback query: chat_id={chat_id}, data={data}")
+
+        try:
+            # Telegram callback 응답 (로딩 표시 제거)
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{self.base_url}/answerCallbackQuery",
+                    data={"callback_query_id": cb_id},
+                )
+
+            if data == "preregister_yes":
+                self._save_pre_registration(chat_id)
+                await self.send_text_message(
+                    chat_id,
+                    "✅ 등록 완료! 상세 리포트가 오픈되면 가장 먼저 알려드릴게요."
+                )
+            elif data == "preregister_no":
+                await self.send_text_message(
+                    chat_id,
+                    "알겠어요. 나중에 언제든 문의해 주세요!"
+                )
+        except Exception as e:
+            logger.error(f"[Telegram] Callback 처리 실패: {str(e)}", exc_info=True)
+
+    def _save_pre_registration(self, chat_id: int):
+        """사전예약 정보를 DB에 저장합니다."""
+        from app.models.pre_registration import PreRegistration
+        try:
+            with Session(engine) as session:
+                existing = session.query(PreRegistration).filter(
+                    PreRegistration.telegram_chat_id == str(chat_id)
+                ).first()
+                if existing:
+                    logger.info(f"[DB] PreRegistration already exists for chat_id: {chat_id}")
+                    return
+                reg = PreRegistration(telegram_chat_id=str(chat_id))
+                session.add(reg)
+                session.commit()
+                logger.info(f"[DB] PreRegistration saved for chat_id: {chat_id}")
+        except Exception as e:
+            logger.error(f"[DB] PreRegistration 저장 실패: {str(e)}")
 
 telegram_service = TelegramService()
