@@ -69,7 +69,25 @@ class TelegramService:
             return
 
         chat_id = update.message.chat.id
-        logger.info(f"[Telegram] Text received (chat_id: {chat_id}): {update.message.text[:50]}")
+        text = update.message.text.strip()
+        logger.info(f"[Telegram] Text received (chat_id: {chat_id}): {text[:50]}")
+
+        if text == "/start":
+            await self.client.send_message(
+                chat_id,
+                "👋 *SyncWatt에 오신 것을 환영합니다!*\n\n"
+                "태양광 정산서 사진 한 장이면,\n"
+                "한전 고정가 vs KPX 직거래 중 어느 쪽이 유리한지\n"
+                "*10초 안에* 알려드려요.\n\n"
+                "📸 *사용 방법*\n"
+                "정산서를 사진으로 찍어 보내주세요. 그게 전부예요!\n\n"
+                "📊 *분석 내용*\n"
+                "• 한전 vs KPX 기회비용 비교\n"
+                "• SMP 시세 기반 최적 단가 분석\n"
+                "• 이용률 평가\n\n"
+                "🆓 하루 3회 무료 분석 가능합니다.",
+            )
+            return
 
         await self.client.send_message(
             chat_id,
