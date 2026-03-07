@@ -47,8 +47,11 @@ jobs:
       - name: Lint with ruff
         run: ruff check .
 
-      # - name: Run tests
-      #   run: pytest  # 나중에 테스트 코드 추가 시 활성화
+      - name: Run tests
+        env:
+          TELEGRAM_BOT_TOKEN: "test-token"
+          DATABASE_URL: "sqlite:///test.db"
+        run: pytest tests/ -v
 
   build-and-push-ghcr:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
