@@ -1,15 +1,25 @@
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.api.webhook import router as webhook_router
 from app.core.config import settings
 from app.db.session import init_db
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-# Suppress httpx request logs that contain bot tokens in URLs
+# Structured logging: prod=JSON (K8s compatible), dev=colored text
+_is_prod = os.getenv("ENV", "dev") in ("prod", "production")
+
+if _is_prod:
+    from pythonjsonlogger.json import JsonFormatter
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JsonFormatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+else:
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+
+logging.root.handlers = [handler]
+logging.root.setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
