@@ -84,6 +84,10 @@ def mock_weather():
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(
+    not __import__("os").environ.get("GOOGLE_API_KEY"),
+    reason="GOOGLE_API_KEY not set — skipping integration test",
+)
 async def test_full_pipeline_with_sample_image(image_bytes, mock_smp, mock_weather):
     """
     실제 정산서 이미지 → ParallelAgent(OCR+Vision) → CodeVerifier → DataFetcher → Diagnosis
