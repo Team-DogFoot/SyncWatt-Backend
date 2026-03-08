@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str | None = "postgres"
     POSTGRES_DB: str | None = "syncwatt"
 
+    # Kakao OAuth
+    KAKAO_CLIENT_ID: str = ""
+    KAKAO_CLIENT_SECRET: str = ""
+    KAKAO_REDIRECT_URI: str = "http://localhost:3000/auth/kakao/callback"
+
+    # JWT
+    JWT_SECRET_KEY: str = "dev-secret-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
+
     # External Data API Keys
     KPX_API_KEY: str | None = None
 

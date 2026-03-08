@@ -17,3 +17,5 @@ openpyxl
 psycopg2-binary
 boto3
 python-json-logger
+PyJWT==2.9.0
+cryptography==44.0.0

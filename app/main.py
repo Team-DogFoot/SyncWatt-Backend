@@ -3,7 +3,10 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.webhook import router as webhook_router
+from app.api.calculator import router as calculator_router
+from app.api.auth import router as auth_router
 from app.core.config import settings
 from app.db.session import init_db
 
@@ -38,7 +41,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="SyncWatt-Backend", version="0.1.0", lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://syncwatt.dog-foot.com", "http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(webhook_router)
+app.include_router(calculator_router)
+app.include_router(auth_router)
 
 
 @app.get("/health")
